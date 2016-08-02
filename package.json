@@ -1,0 +1,17 @@
+{
+  "name": "VirtualScroll",
+  "version": "1.0.0",
+  "main": "js/VirtualScroll",
+  "lotus": {
+    "plugins": [
+      "lotus-coffee"
+    ]
+  },
+  "dependencies": {
+    "Draggable": "aleclarson/Draggable#2.0.0",
+    "Rubberband": "aleclarson/Rubberband#1.0.0",
+    "device": "aleclarson/device#1.0.0",
+    "emptyFunction": "aleclarson/emptyFunction#1.0.0",
+    "modx": "aleclarson/modx#1.0.0"
+  }
+}
