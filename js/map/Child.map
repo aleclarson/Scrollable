@@ -1,0 +1,10 @@
+{
+  "version": 3,
+  "file": "Child.js",
+  "sourceRoot": "../../src",
+  "sources": [
+    "Child.coffee"
+  ],
+  "names": [],
+  "mappings": "AACA,IAAA;;AAAA,GAAA,GAAM,OAAA,CAAQ,OAAR;;AACN,OAAA,GAAU,OAAA,CAAQ,WAAR;;AAEV,MAAM,CAAC,OAAP,GAAiB,GAAG,CAAC,IAAI,CAAC,EAAT,CAAY,OAAO,CAAC,IAApB"
+}
