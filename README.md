@@ -1,5 +1,5 @@
 
-# VirtualScroll v1.0.0 ![experimental](https://img.shields.io/badge/stability-experimental-EC5315.svg?style=flat)
+# Scrollable v1.0.0 ![experimental](https://img.shields.io/badge/stability-experimental-EC5315.svg?style=flat)
 
 > A scrollable `View` designed to be subclassed.
 
@@ -11,15 +11,15 @@
 
 #### Subclassing
 
-Check out these `VirtualScroll` subclasses (for inspiration):
+Check out these `Scrollable` subclasses (for inspiration):
 - [`Scroll`](https://github.com/aleclarson/Scroll): Decelerates once dragging ends. Supports rows + sections.
 - [`SnapScroll`](https://github.com/aleclarson/SnapScroll): Snaps to nearest index once dragging ends.
 
-[**Learn more**](subclassing.md) about subclassing `VirtualScroll`.
+[**Learn more**](subclassing.md) about subclassing `Scrollable`.
 
 &nbsp;
 
-## `VirtualScroll`
+## `Scrollable`
 
 ### Options
 

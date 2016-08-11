@@ -1,17 +1,28 @@
 {
-  "name": "VirtualScroll",
+  "name": "Scrollable",
   "version": "1.0.0",
-  "main": "js/VirtualScroll",
+  "main": "js/Scrollable",
   "lotus": {
     "plugins": [
       "lotus-coffee"
     ]
   },
   "dependencies": {
+    "ArrayOf": "aleclarson/ArrayOf#1.1.0",
     "Draggable": "aleclarson/Draggable#2.0.0",
+    "Event": "aleclarson/Event#2.0.1",
+    "Nan": "aleclarson/Nan#1.0.0",
+    "Null": "aleclarson/Null#1.0.0",
+    "Promise": "aleclarson/Promise#1.0.0",
     "Rubberband": "aleclarson/Rubberband#1.0.0",
-    "device": "aleclarson/device#1.0.0",
+    "Type": "aleclarson/Type#1.1.0",
+    "assertType": "aleclarson/assertType#2.0.0",
+    "clampValue": "aleclarson/clampValue#1.0.0",
     "emptyFunction": "aleclarson/emptyFunction#1.0.0",
-    "modx": "aleclarson/modx#1.0.0"
+    "isDev": "aleclarson/isDev#1.0.0",
+    "isType": "aleclarson/isType#1.0.0",
+    "modx": "aleclarson/modx#1.0.0",
+    "random": "aleclarson/random#1.0.4",
+    "sync": "aleclarson/sync#1.0.0"
   }
 }

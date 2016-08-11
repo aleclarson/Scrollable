@@ -4,11 +4,11 @@
 ```coffee
 {Component} = require "modx"
 
-VirtualScroll = require "VirtualScroll"
+Scrollable = require "Scrollable"
 
 type = Component.Type "MyScroll"
 
-type.inherits VirtualScroll
+type.inherits Scrollable
 ```
 
 ### Properties
@@ -99,27 +99,14 @@ __isEndReached: (offset, maxOffset) ->
   # to determine if the end has been reached.
   #
 
-__onScroll: (offset) ->
-  #
-  # Called whenever the 'offset' changes.
-  #
-  # By default, emits the 'didScroll' event.
-  # When you override, you can choose when the
-  # event is emitted by calling '@__super(arguments)'.
-  #
-
 __onDragStart: ->
   #
   # Called whenever the user starts dragging.
-  #
-  # By default, does nothing.
   #
 
 __onDragEnd: ->
   #
   # Called whenever the user stops dragging.
-  #
-  # By default, does nothing.
   #
 
 __shouldRebound: ->
@@ -128,5 +115,17 @@ __shouldRebound: ->
   # Return false to prevent the rebound animation.
   #
   # By default, always returns true.
+  #
+
+__onScroll: (offset, maxOffset) ->
+  #
+  # Called whenever 'offset' changes.
+  #
+
+__computeOffset: (offset, minOffset, maxOffset) ->
+  #
+  # Called whenever '_drag.offset' changes.
+  # Must return a Number representing the new 'offset'.
+  # NOTE: This is called within a Reaction!
   #
 ```
