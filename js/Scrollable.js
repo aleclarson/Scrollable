@@ -1,6 +1,6 @@
-var ArrayOf, Device, Draggable, Element, Nan, NativeValue, Null, Rubberband, Section, Type, View, assertType, clampValue, emptyFunction, isType, ref, type;
+var ArrayOf, Children, Device, Draggable, Element, Nan, NativeValue, Null, Rubberband, Section, Type, View, assertType, clampValue, emptyFunction, isType, ref, type;
 
-ref = require("modx"), Type = ref.Type, Device = ref.Device, Element = ref.Element;
+ref = require("modx"), Type = ref.Type, Device = ref.Device, Element = ref.Element, Children = ref.Children;
 
 NativeValue = require("modx/native").NativeValue;
 
@@ -66,7 +66,7 @@ type.defineReactiveValues({
 type.defineValues(function(options) {
   return {
     visibleThreshold: options.visibleThreshold,
-    _section: options.section,
+    _section: null,
     _edgeOffset: null,
     _maxOffset: null,
     __renderContents: options.section ? this._renderSection : void 0
@@ -87,58 +87,14 @@ type.defineFrozenValues(function(options) {
       shouldCaptureOnStart: this._shouldCaptureOnStart
     }),
     _edge: Rubberband({
-      maxValue: options.stretchLimit != null ? options.stretchLimit : options.stretchLimit = this._defaultStretchLimit,
+      maxValue: options.stretchLimit != null ? options.stretchLimit : options.stretchLimit = this._getDefaultStretchLimit(options.axis),
       elasticity: options.elasticity
-    }),
-    _edgeDelta: NativeValue((function(_this) {
-      return function() {
-        var maxOffset, minOffset, offset;
-        offset = 0 - _this._drag.offset.value;
-        if (offset < (minOffset = _this.minOffset)) {
-          _this._edgeOffset = minOffset;
-          _this._edge.delta = minOffset - offset;
-        } else if (offset > (maxOffset = _this._maxOffset || 0)) {
-          _this._edgeOffset = maxOffset;
-          _this._edge.delta = offset - maxOffset;
-        } else {
-          _this._edgeOffset = null;
-          _this._edge.delta = 0;
-        }
-      };
-    })(this)),
-    _offset: NativeValue((function(_this) {
-      return function() {
-        var maxOffset, minOffset, offset;
-        offset = 0 - _this._drag.offset.value;
-        minOffset = _this.minOffset;
-        maxOffset = _this._maxOffset || 0;
-        offset = _this.__computeOffset(offset, minOffset, maxOffset);
-        if (Nan.test(offset)) {
-          throw Error("Unexpected NaN value!");
-        }
-        if (!isType(offset, Number)) {
-          throw TypeError("'__computeOffset' must return a Number!");
-        }
-        return Device.round(0 - offset);
-      };
-    })(this)),
-    _pointerEvents: NativeValue((function(_this) {
-      return function() {
-        if (_this.isTouchable) {
-          return "auto";
-        }
-        return "none";
-      };
-    })(this))
+    })
   };
 });
 
-type.initInstance(function(arg) {
-  var section;
-  section = arg.section;
-  section._isVisible = true;
-  section._index = 0;
-  return section._scroll = this;
+type.initInstance(function(options) {
+  this.section = options.section || null;
 });
 
 type.defineEvents({
@@ -153,9 +109,6 @@ type.defineEvents({
 });
 
 type.defineGetters({
-  section: function() {
-    return this._section;
-  },
   axis: function() {
     return this._drag.axis;
   },
@@ -200,16 +153,32 @@ type.defineGetters({
   },
   didTouchEnd: function() {
     return this._drag.didTouchEnd;
-  },
-  _defaultStretchLimit: function() {
-    if (this.axis === "x") {
-      return Device.width;
-    }
-    return Device.height;
   }
 });
 
 type.definePrototype({
+  section: {
+    get: function() {
+      return this._section;
+    },
+    set: function(section) {
+      var oldValue;
+      if (oldValue = this._section) {
+        if (oldValue === section) {
+          return;
+        }
+        section._isVisible = null;
+        section._index = null;
+        section._scroll = null;
+      }
+      if (section) {
+        section._isVisible = true;
+        section._index = 0;
+        section._scroll = this;
+        return this._section = section;
+      }
+    }
+  },
   offset: {
     get: function() {
       return 0 - this._offset.value;
@@ -296,6 +265,12 @@ type.defineMethods({
       velocity *= -1;
     }
     return this._edge.rebound(velocity);
+  },
+  _getDefaultStretchLimit: function(axis) {
+    if (axis === "x") {
+      return Device.width;
+    }
+    return Device.height;
   }
 });
 
@@ -375,7 +350,56 @@ type.defineHooks({
   }
 });
 
-type.propTypes = type.defineListeners(function() {
+type.propTypes = {
+  children: Children
+};
+
+type.defineNativeValues(function() {
+  return {
+    _edgeDelta: (function(_this) {
+      return function() {
+        var maxOffset, minOffset, offset;
+        offset = 0 - _this._drag.offset.value;
+        if (offset < (minOffset = _this.minOffset)) {
+          _this._edgeOffset = minOffset;
+          _this._edge.delta = minOffset - offset;
+        } else if (offset > (maxOffset = _this._maxOffset || 0)) {
+          _this._edgeOffset = maxOffset;
+          _this._edge.delta = offset - maxOffset;
+        } else {
+          _this._edgeOffset = null;
+          _this._edge.delta = 0;
+        }
+      };
+    })(this),
+    _offset: (function(_this) {
+      return function() {
+        var maxOffset, minOffset, offset;
+        offset = 0 - _this._drag.offset.value;
+        minOffset = _this.minOffset;
+        maxOffset = _this._maxOffset || 0;
+        offset = _this.__computeOffset(offset, minOffset, maxOffset);
+        if (Nan.test(offset)) {
+          throw Error("Unexpected NaN value!");
+        }
+        if (!isType(offset, Number)) {
+          throw TypeError("'__computeOffset' must return a Number!");
+        }
+        return Device.round(0 - offset);
+      };
+    })(this),
+    _pointerEvents: (function(_this) {
+      return function() {
+        if (_this.isTouchable) {
+          return "auto";
+        }
+        return "none";
+      };
+    })(this)
+  };
+});
+
+type.defineListeners(function() {
   this._offset.didSet(this._onScroll);
   this._drag.didGrant(this._onDragStart);
   return this._drag.didEnd((function(_this) {
@@ -432,7 +456,7 @@ type.render(function() {
 type.defineMethods({
   _renderSection: function() {
     return this._section.render({
-      style: this.styles.content()
+      style: this.styles.contents()
     });
   }
 });

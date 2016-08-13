@@ -59,7 +59,6 @@ type.defineMethods({
     scroll = this.scroll;
     this._offset = layout[scroll.axis];
     this._length = layout[scroll.axis === "x" ? "width" : "height"];
-    this._isVisible = scroll._isAreaVisible(this._offset, this._length);
     return this._didLayout.emit();
   }
 });

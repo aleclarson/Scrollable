@@ -1,4 +1,4 @@
-var Event, Promise, Random, ScrollChild, ScrollSection, SectionHeader, Style, Type, View, assertType, clampValue, emptyFunction, ref, sync, type;
+var Event, Promise, Random, ReactiveList, ScrollChild, ScrollSection, SectionHeader, Style, Type, View, assertType, clampValue, emptyFunction, ref, sync, type;
 
 require("isDev");
 
@@ -7,6 +7,8 @@ ref = require("modx"), Type = ref.Type, Style = ref.Style;
 View = require("modx/views").View;
 
 emptyFunction = require("emptyFunction");
+
+ReactiveList = require("ReactiveList");
 
 assertType = require("assertType");
 
@@ -65,7 +67,8 @@ type.defineValues(function(options) {
     _rendering: null,
     _children: ReactiveList(),
     _childElements: [],
-    _headerElements: [],
+    _headerElement: null,
+    _headerLength: null,
     _footerElement: null,
     _footerLength: null,
     _scroll: null
@@ -160,11 +163,11 @@ type.defineMethods({
     var children;
     assertType(index, Number);
     isDev && this._children._assertValidIndex(index);
-    children = this._children_array;
+    children = this._children._array;
     sync.repeat(numChildren - index, function(offset) {
       return children[index + offset]._index += 1;
     });
-    assertType(child, ScrollChild.get());
+    assertType(child, ScrollChild.Kind);
     this._initChild(child, index);
     this._childElements.splice(index, 0, false);
     this._children.insert(index, child);
@@ -236,7 +239,7 @@ type.defineMethods({
     child._setSection(null);
   },
   _prependChild: function(child) {
-    assertType(child, ScrollChild.get());
+    assertType(child, ScrollChild.Kind);
     this._children.forEach(function(child) {
       return child._index += 1;
     });
@@ -255,7 +258,7 @@ type.defineMethods({
     section = this;
     elements = new Array(length);
     children.forEach(function(child, index) {
-      assertType(child, ScrollChild.get());
+      assertType(child, ScrollChild.Kind);
       section._initChild(child, index);
       return elements[index] = false;
     });
@@ -263,7 +266,7 @@ type.defineMethods({
     this._childElements = elements.concat(this._childElements);
   },
   _appendChild: function(child) {
-    assertType(child, ScrollChild.get());
+    assertType(child, ScrollChild.Kind);
     this._initChild(child, this._children.length);
     this._children.append(child);
     this._childElements.push(false);
@@ -277,7 +280,7 @@ type.defineMethods({
     section = this;
     elements = new Array(length);
     children.forEach(function(child, index) {
-      assertType(child, ScrollChild.get());
+      assertType(child, ScrollChild.Kind);
       section._initChild(child, index + offset);
       return elements[index] = false;
     });
@@ -403,10 +406,11 @@ type.defineMethods({
     this._length = layout[scroll.axis === "x" ? "width" : "height"];
     if (this._isRoot) {
       scroll._setContentLength(this._length);
-    } else {
-      this._isVisible = scroll._isAreaVisible(this._offset, this._length);
     }
     return this.didLayout.emit();
+  },
+  _onHeaderLayout: function(layout) {
+    return this._headerLength = layout[this.scroll.axis === "x" ? "width" : "height"];
   },
   _onFooterLayout: function(layout) {
     return this._footerLength = layout[this.scroll.axis === "x" ? "width" : "height"];
@@ -437,16 +441,20 @@ type.render(function() {
 
 type.defineMethods({
   _renderSection: function() {
-    var base, base1, children, length;
+    var children, length;
     if (this.isEmpty) {
       return this.__renderEmpty();
     }
     length = (children = this._renderChildren()).length;
-    if ((base = this._headerElements)[0] == null) {
-      base[0] = this._header ? this._header.renderEmpty() : this.__renderHeader();
-    }
-    if ((base1 = this._headerElements)[1] == null) {
-      base1[1] = this._header ? this._header.render() : false;
+    if (this._headerElement == null) {
+      this._headerElement = View({
+        children: this.__renderHeader(),
+        onLayout: (function(_this) {
+          return function(event) {
+            return _this._onHeaderLayout(event.nativeEvent.layout);
+          };
+        })(this)
+      });
     }
     if (this._children.length === length) {
       if (this._footerElement == null) {
@@ -460,13 +468,13 @@ type.defineMethods({
         });
       }
     }
-    return [this._headerElements[0], children, this._headerElements[1], this._footerElement];
+    return [this._headerElement, children, this._footerElement];
   },
   _renderChildren: function() {
     var children, elements, endIndex, index, length, offset, ref1, startIndex;
     ref1 = this, startIndex = ref1.startIndex, endIndex = ref1.endIndex;
     length = endIndex - startIndex;
-    children = this._children;
+    children = this._children._array;
     elements = this._childElements;
     offset = -1;
     while (++offset < length) {

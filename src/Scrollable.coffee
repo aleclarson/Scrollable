@@ -1,5 +1,5 @@
 
-{Type, Device, Element} = require "modx"
+{Type, Device, Element, Children} = require "modx"
 {NativeValue} = require "modx/native"
 {View} = require "modx/views"
 
@@ -48,7 +48,7 @@ type.defineValues (options) ->
 
   visibleThreshold: options.visibleThreshold
 
-  _section: options.section
+  _section: null
 
   _edgeOffset: null
 
@@ -67,46 +67,12 @@ type.defineFrozenValues (options) ->
     shouldCaptureOnStart: @_shouldCaptureOnStart
 
   _edge: Rubberband
-    maxValue: options.stretchLimit ?= @_defaultStretchLimit
+    maxValue: options.stretchLimit ?= @_getDefaultStretchLimit options.axis
     elasticity: options.elasticity
 
-  _edgeDelta: NativeValue =>
-    offset = 0 - @_drag.offset.value
-    if offset < (minOffset = @minOffset)
-      @_edgeOffset = minOffset
-      @_edge.delta = minOffset - offset
-    else if offset > (maxOffset = @_maxOffset or 0)
-      @_edgeOffset = maxOffset
-      @_edge.delta = offset - maxOffset
-    else
-      @_edgeOffset = null
-      @_edge.delta = 0
-    return
-
-  _offset: NativeValue =>
-
-    offset = 0 - @_drag.offset.value
-    minOffset = @minOffset
-    maxOffset = @_maxOffset or 0
-
-    offset = @__computeOffset offset, minOffset, maxOffset
-
-    if Nan.test offset
-      throw Error "Unexpected NaN value!"
-
-    if not isType offset, Number
-      throw TypeError "'__computeOffset' must return a Number!"
-
-    return Device.round 0 - offset
-
-  _pointerEvents: NativeValue =>
-    return "auto" if @isTouchable
-    return "none"
-
-type.initInstance ({ section }) ->
-  section._isVisible = yes
-  section._index = 0
-  section._scroll = this
+type.initInstance (options) ->
+  @section = options.section or null
+  return
 
 #
 # Prototype-related
@@ -124,8 +90,6 @@ type.defineEvents
   didReachEnd: null
 
 type.defineGetters
-
-  section: -> @_section
 
   axis: -> @_drag.axis
 
@@ -157,12 +121,23 @@ type.defineGetters
 
   didTouchEnd: -> @_drag.didTouchEnd
 
-  _defaultStretchLimit: ->
-    if @axis is "x"
-      return Device.width
-    return Device.height
-
 type.definePrototype
+
+  section:
+    get: -> @_section
+    set: (section) ->
+
+      if oldValue = @_section
+        return if oldValue is section
+        section._isVisible = null
+        section._index = null
+        section._scroll = null
+
+      if section
+        section._isVisible = yes
+        section._index = 0
+        section._scroll = this
+        @_section = section
 
   offset:
     get: -> 0 - @_offset.value
@@ -228,6 +203,10 @@ type.defineMethods
     maxOffset = @_maxOffset or 0
     velocity *= -1 if @offset > maxOffset
     @_edge.rebound velocity
+
+  _getDefaultStretchLimit: (axis) ->
+    return Device.width if axis is "x"
+    return Device.height
 
 type.defineBoundMethods
 
@@ -314,7 +293,42 @@ type.defineHooks
 #
 
 type.propTypes =
+  children: Children
 
+type.defineNativeValues ->
+
+  _edgeDelta: =>
+    offset = 0 - @_drag.offset.value
+    if offset < (minOffset = @minOffset)
+      @_edgeOffset = minOffset
+      @_edge.delta = minOffset - offset
+    else if offset > (maxOffset = @_maxOffset or 0)
+      @_edgeOffset = maxOffset
+      @_edge.delta = offset - maxOffset
+    else
+      @_edgeOffset = null
+      @_edge.delta = 0
+    return
+
+  _offset: =>
+
+    offset = 0 - @_drag.offset.value
+    minOffset = @minOffset
+    maxOffset = @_maxOffset or 0
+
+    offset = @__computeOffset offset, minOffset, maxOffset
+
+    if Nan.test offset
+      throw Error "Unexpected NaN value!"
+
+    if not isType offset, Number
+      throw TypeError "'__computeOffset' must return a Number!"
+
+    return Device.round 0 - offset
+
+  _pointerEvents: =>
+    return "auto" if @isTouchable
+    return "none"
 
 type.defineListeners ->
 
@@ -352,7 +366,7 @@ type.defineMethods
 
   _renderSection: ->
     return @_section.render
-      style: @styles.content()
+      style: @styles.contents()
 
 type.defineHooks
 

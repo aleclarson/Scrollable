@@ -26,10 +26,10 @@ type.defineGetters
 
 type.definePrototype
 
-  top:
-    get: -> @_top.value
+  offset:
+    get: -> @_offset.value
     set: (newValue) ->
-      @_top.value = newValue
+      @_offset.value = newValue
 
   length:
     get: -> @_length.value
@@ -58,20 +58,21 @@ type.defineMethods
 # Rendering
 #
 
-type.defineNativeValues
+type.defineNativeValues (options) ->
 
-  _top: 0
+  _offset: 0
 
-  _length: (options) -> options.length
+  _length: options.length
 
 type.defineStyles
 
   header:
-    flexDirection: -> "row" if @scroll.axis is "y"
     position: "absolute"
-    top: -> @_top
     left: 0
     right: 0
+    translateX: -> @_offset if @scroll.axis is "x"
+    translateY: -> @_offset if @scroll.axis is "y"
+    flexDirection: -> "row" if @scroll.axis is "y"
 
   emptyHeader:
     alignSelf: "stretch"

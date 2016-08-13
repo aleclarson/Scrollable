@@ -45,7 +45,8 @@ type.defineMethods
     {scroll} = this
     @_offset = layout[scroll.axis]
     @_length = layout[if scroll.axis is "x" then "width" else "height"]
-    @_isVisible = scroll._isAreaVisible @_offset, @_length
+    # @_isVisible = scroll._isAreaVisible @_offset, @_length
+    #   TODO: Update visibility of nested rows.
     @_didLayout.emit()
 
 #

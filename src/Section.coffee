@@ -5,6 +5,7 @@ require "isDev"
 {View} = require "modx/views"
 
 emptyFunction = require "emptyFunction"
+ReactiveList = require "ReactiveList"
 assertType = require "assertType"
 clampValue = require "clampValue"
 Promise = require "Promise"
@@ -64,7 +65,9 @@ type.defineValues (options) ->
 
   _childElements: []
 
-  _headerElements: []
+  _headerElement: null
+
+  _headerLength: null
 
   _footerElement: null
 
@@ -147,11 +150,11 @@ type.defineMethods
 
     isDev and @_children._assertValidIndex index
 
-    children = @_children_array
+    children = @_children._array
     sync.repeat numChildren - index, (offset) ->
       children[index + offset]._index += 1
 
-    assertType child, ScrollChild.get()
+    assertType child, ScrollChild.Kind
     @_initChild child, index
 
     @_childElements.splice index, 0, no
@@ -229,7 +232,7 @@ type.defineMethods
 
   _prependChild: (child) ->
 
-    assertType child, ScrollChild.get()
+    assertType child, ScrollChild.Kind
 
     # Increment the `index` of every child.
     @_children.forEach (child) ->
@@ -251,7 +254,7 @@ type.defineMethods
     section = this
     elements = new Array length
     children.forEach (child, index) ->
-      assertType child, ScrollChild.get()
+      assertType child, ScrollChild.Kind
       section._initChild child, index
       elements[index] = no
 
@@ -261,7 +264,7 @@ type.defineMethods
 
   _appendChild: (child) ->
 
-    assertType child, ScrollChild.get()
+    assertType child, ScrollChild.Kind
 
     @_initChild child, @_children.length
 
@@ -276,7 +279,7 @@ type.defineMethods
     section = this
     elements = new Array length
     children.forEach (child, index) ->
-      assertType child, ScrollChild.get()
+      assertType child, ScrollChild.Kind
       section._initChild child, index + offset
       elements[index] = no
 
@@ -397,8 +400,12 @@ type.defineMethods
     @_offset = layout[scroll.axis]
     @_length = layout[if scroll.axis is "x" then "width" else "height"]
     if @_isRoot then scroll._setContentLength @_length
-    else @_isVisible = scroll._isAreaVisible @_offset, @_length
+    # else @_isVisible = scroll._isAreaVisible @_offset, @_length
+    #   TODO: Update visibility of nested sections.
     @didLayout.emit()
+
+  _onHeaderLayout: (layout) ->
+    @_headerLength = layout[if @scroll.axis is "x" then "width" else "height"]
 
   _onFooterLayout: (layout) ->
     @_footerLength = layout[if @scroll.axis is "x" then "width" else "height"]
@@ -429,8 +436,10 @@ type.defineMethods
 
     { length } = children = @_renderChildren()
 
-    @_headerElements[0] ?= if @_header then @_header.renderEmpty() else @__renderHeader()
-    @_headerElements[1] ?= if @_header then @_header.render() else false
+    @_headerElement ?= View
+      children: @__renderHeader()
+      onLayout: (event) =>
+        @_onHeaderLayout event.nativeEvent.layout
 
     if @_children.length is length
       @_footerElement ?= View
@@ -439,9 +448,8 @@ type.defineMethods
           @_onFooterLayout event.nativeEvent.layout
 
     return [
-      @_headerElements[0]
+      @_headerElement
       children
-      @_headerElements[1]
       @_footerElement
     ]
 
@@ -450,7 +458,7 @@ type.defineMethods
     { startIndex, endIndex } = this
     length = endIndex - startIndex
 
-    children = @_children
+    children = @_children._array
     elements = @_childElements
 
     # TODO: Only iterate the unmounted children?

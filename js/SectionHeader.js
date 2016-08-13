@@ -31,12 +31,12 @@ type.defineGetters({
 });
 
 type.definePrototype({
-  top: {
+  offset: {
     get: function() {
-      return this._top.value;
+      return this._offset.value;
     },
     set: function(newValue) {
-      return this._top.value = newValue;
+      return this._offset.value = newValue;
     }
   },
   length: {
@@ -65,26 +65,33 @@ type.defineMethods({
   }
 });
 
-type.defineNativeValues({
-  _top: 0,
-  _length: function(options) {
-    return options.length;
-  }
+type.defineNativeValues(function(options) {
+  return {
+    _offset: 0,
+    _length: options.length
+  };
 });
 
 type.defineStyles({
   header: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    translateX: function() {
+      if (this.scroll.axis === "x") {
+        return this._offset;
+      }
+    },
+    translateY: function() {
+      if (this.scroll.axis === "y") {
+        return this._offset;
+      }
+    },
     flexDirection: function() {
       if (this.scroll.axis === "y") {
         return "row";
       }
-    },
-    position: "absolute",
-    top: function() {
-      return this._top;
-    },
-    left: 0,
-    right: 0
+    }
   },
   emptyHeader: {
     alignSelf: "stretch",
