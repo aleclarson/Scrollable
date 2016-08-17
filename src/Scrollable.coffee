@@ -1,5 +1,5 @@
 
-{Type, Device, Element, Children} = require "modx"
+{Type, Device, Style, Children} = require "modx"
 {NativeValue} = require "modx/native"
 {View} = require "modx/views"
 
@@ -53,8 +53,6 @@ type.defineValues (options) ->
   _edgeOffset: null
 
   _maxOffset: null
-
-  __renderContents: if options.section then @_renderSection
 
 type.defineFrozenValues (options) ->
 
@@ -228,7 +226,7 @@ type.defineBoundMethods
     maxOffset = @_maxOffset or 0
     if @inBounds
       @_updateReachedEnd offset, maxOffset
-      @_section and @_section._getVisibleRange()
+      @_section and @_section.updateVisibleRange()
     @__onScroll offset, maxOffset
     @_events.emit "didScroll", [offset]
 
@@ -292,7 +290,8 @@ type.defineHooks
 # View-related
 #
 
-type.propTypes =
+type.defineProps
+  style: Style
   children: Children
 
 type.defineNativeValues ->
@@ -348,12 +347,9 @@ type.defineStyles
     translateX: -> @_offset if @axis is "x"
     translateY: -> @_offset if @axis is "y"
 
-  container:
-    overflow: "hidden"
-
 type.render ->
   return View
-    style: @styles.container()
+    style: [ @props.style, {overflow: "hidden"} ]
     children: @__renderContents()
     pointerEvents: @_pointerEvents
     mixins: [ @_drag.touchHandlers ]
@@ -362,15 +358,14 @@ type.render ->
       key = if @axis is "x" then "width" else "height"
       @_setVisibleLength layout[key]
 
-type.defineMethods
-
-  _renderSection: ->
-    return @_section.render
-      style: @styles.contents()
-
 type.defineHooks
 
   __renderContents: ->
+
+    if @_section
+      return @_section.render
+        style: @styles.contents()
+
     return View
       style: @styles.contents()
       children: @props.children

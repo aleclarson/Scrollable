@@ -7,7 +7,6 @@ require "isDev"
 emptyFunction = require "emptyFunction"
 ReactiveList = require "ReactiveList"
 assertType = require "assertType"
-clampValue = require "clampValue"
 Promise = require "Promise"
 Random = require "random"
 Event = require "Event"
@@ -69,7 +68,7 @@ type.defineValues (options) ->
 
   _headerLength: null
 
-  _footerElement: null
+  _footerElement: no
 
   _footerLength: null
 
@@ -99,12 +98,12 @@ type.definePrototype
     get: -> @_children.array
     set: (children) ->
       assertType children, Array
+      section = this
 
       oldChildren = @_children._array
       oldChildren and oldChildren.forEach (child) ->
         section._deinitChild child
 
-      section = this
       elements = new Array children.length
       children.forEach (child, index) ->
         section._initChild child, index
@@ -121,12 +120,14 @@ type.definePrototype
   startIndex:
     get: -> @_startIndex
     set: (newValue) ->
-      @_startIndex = clampValue newValue, 0, @_children.length
+      @_children._assertValidIndex newValue
+      @_startIndex = newValue
 
   endIndex:
     get: -> @_endIndex
     set: (newValue) ->
-      @_endIndex = clampValue newValue, 0, @_children.length
+      @_children._assertValidIndex newValue
+      @_endIndex = newValue
 
 type.defineMethods
 
@@ -175,6 +176,13 @@ type.defineMethods
     @_deinitChild @_children.remove index
     return
 
+  setRange: (index, length) ->
+    assertType index, Number
+    assertType length, Number
+    @startIndex = index
+    @endIndex = index + length
+    return this
+
   forceUpdate: ->
     @view and @view.forceUpdate()
     return
@@ -182,10 +190,15 @@ type.defineMethods
   # TODO: Support rendering children above the visible region.
   renderWhile: (shouldRender) ->
     return Promise() unless shouldRender()
+    maxIndex = @_children._length._value
+    return Promise() if @_endIndex is maxIndex
     return @_rendering ?= Promise.defer (resolve) =>
 
-      @endIndex += @_batchSize
-      # @startIndex -= @_batchSize if (@endIndex - @startIndex) >= @renderLimit
+      @_endIndex = Math.max @_endIndex + @_batchSize, maxIndex
+
+      # TODO: Implement trimming to save memory.
+      # if (@endIndex - @startIndex) >= @renderLimit
+      #   @startIndex -= @_batchSize
 
       onLayout = @didLayout 1, =>
         @renderWhile shouldRender
@@ -321,7 +334,7 @@ type.defineMethods
     while ++index < numChildren
       child = children[index]
 
-      if element is no
+      if elements[index] is no
         child._isVisible = no
         continue if beforeVisibleRange
         break
@@ -404,65 +417,41 @@ type.defineMethods
     #   TODO: Update visibility of nested sections.
     @didLayout.emit()
 
-  _onHeaderLayout: (layout) ->
-    @_headerLength = layout[if @scroll.axis is "x" then "width" else "height"]
-
-  _onFooterLayout: (layout) ->
-    @_footerLength = layout[if @scroll.axis is "x" then "width" else "height"]
-
 #
 # Rendering
 #
 
-type.propTypes =
+type.defineProps
   style: Style
-  removeClippedSubviews: Boolean
-
-type.propDefaults =
-  removeClippedSubviews: no # TODO: Should this be `yes`?
+  removeClippedSubviews: Boolean.withDefault no # TODO: Should this be `yes`?
 
 type.render ->
+  if @isEmpty
+    section = @__renderEmpty()
+  else
+    section = @__renderSection()
   return View
     style: @props.style
-    children: @_renderSection()
+    children: section
     removeClippedSubviews: @props.removeClippedSubviews
     onLayout: (event) => @_onLayout event.nativeEvent.layout
 
 type.defineMethods
 
-  _renderSection: ->
-
-    return @__renderEmpty() if @isEmpty
-
-    { length } = children = @_renderChildren()
-
-    @_headerElement ?= View
+  _renderHeader: ->
+    return @_headerElement ?= View
       children: @__renderHeader()
       onLayout: (event) =>
-        @_onHeaderLayout event.nativeEvent.layout
+        {layout} = event.nativeEvent
+        @_headerLength = layout[if @scroll.axis is "x" then "width" else "height"]
 
-    if @_children.length is length
-      @_footerElement ?= View
-        children: @__renderFooter()
-        onLayout: (event) =>
-          @_onFooterLayout event.nativeEvent.layout
-
-    return [
-      @_headerElement
-      children
-      @_footerElement
-    ]
-
-  _renderChildren: ->
-
-    { startIndex, endIndex } = this
-    length = endIndex - startIndex
-
+  _renderChildren: (startIndex, endIndex) ->
     children = @_children._array
     elements = @_childElements
 
     # TODO: Only iterate the unmounted children?
     offset = -1
+    length = endIndex - startIndex
     while ++offset < length
       index = startIndex + offset
       continue if elements[index] isnt no
@@ -471,6 +460,13 @@ type.defineMethods
     # TODO: Hide mounted children that are not in the active range?
     return elements
 
+  _renderFooter: ->
+    return @_footerElement ?= View
+      children: @__renderFooter()
+      onLayout: (event) =>
+        {layout} = event.nativeEvent
+        @_footerLength = layout[if @scroll.axis is "x" then "width" else "height"]
+
 type.defineHooks
 
   __renderHeader: emptyFunction.thatReturnsFalse
@@ -478,5 +474,11 @@ type.defineHooks
   __renderFooter: emptyFunction.thatReturnsFalse
 
   __renderEmpty: emptyFunction.thatReturnsFalse
+
+  __renderSection: -> [
+    @_renderHeader()
+    @_renderChildren @startIndex, @endIndex
+    @_renderFooter()
+  ]
 
 module.exports = ScrollSection = type.build()

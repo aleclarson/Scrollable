@@ -129,3 +129,16 @@ __computeOffset: (offset, minOffset, maxOffset) ->
   # NOTE: This is called within a Reaction!
   #
 ```
+
+### Examples
+
+> How to call `__renderHeader` and `__renderFooter`
+> when the section is empty (has no children)?
+
+```coffee
+# 1. Override `__renderEmpty`
+__renderEmpty: -> [
+  @_renderHeader() # 2. Render the header!
+  @_renderFooter() # 3. Render the footer!
+]
+```

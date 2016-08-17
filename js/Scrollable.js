@@ -1,6 +1,6 @@
-var ArrayOf, Children, Device, Draggable, Element, Nan, NativeValue, Null, Rubberband, Section, Type, View, assertType, clampValue, emptyFunction, isType, ref, type;
+var ArrayOf, Children, Device, Draggable, Nan, NativeValue, Null, Rubberband, Section, Style, Type, View, assertType, clampValue, emptyFunction, isType, ref, type;
 
-ref = require("modx"), Type = ref.Type, Device = ref.Device, Element = ref.Element, Children = ref.Children;
+ref = require("modx"), Type = ref.Type, Device = ref.Device, Style = ref.Style, Children = ref.Children;
 
 NativeValue = require("modx/native").NativeValue;
 
@@ -68,8 +68,7 @@ type.defineValues(function(options) {
     visibleThreshold: options.visibleThreshold,
     _section: null,
     _edgeOffset: null,
-    _maxOffset: null,
-    __renderContents: options.section ? this._renderSection : void 0
+    _maxOffset: null
   };
 });
 
@@ -292,7 +291,7 @@ type.defineBoundMethods({
     maxOffset = this._maxOffset || 0;
     if (this.inBounds) {
       this._updateReachedEnd(offset, maxOffset);
-      this._section && this._section._getVisibleRange();
+      this._section && this._section.updateVisibleRange();
     }
     this.__onScroll(offset, maxOffset);
     return this._events.emit("didScroll", [offset]);
@@ -350,9 +349,10 @@ type.defineHooks({
   }
 });
 
-type.propTypes = {
+type.defineProps({
+  style: Style,
   children: Children
-};
+});
 
 type.defineNativeValues(function() {
   return {
@@ -430,15 +430,16 @@ type.defineStyles({
         return this._offset;
       }
     }
-  },
-  container: {
-    overflow: "hidden"
   }
 });
 
 type.render(function() {
   return View({
-    style: this.styles.container(),
+    style: [
+      this.props.style, {
+        overflow: "hidden"
+      }
+    ],
     children: this.__renderContents(),
     pointerEvents: this._pointerEvents,
     mixins: [this._drag.touchHandlers],
@@ -453,16 +454,13 @@ type.render(function() {
   });
 });
 
-type.defineMethods({
-  _renderSection: function() {
-    return this._section.render({
-      style: this.styles.contents()
-    });
-  }
-});
-
 type.defineHooks({
   __renderContents: function() {
+    if (this._section) {
+      return this._section.render({
+        style: this.styles.contents()
+      });
+    }
     return View({
       style: this.styles.contents(),
       children: this.props.children,

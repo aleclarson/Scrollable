@@ -1,4 +1,4 @@
-var Event, Promise, Random, ReactiveList, ScrollChild, ScrollSection, SectionHeader, Style, Type, View, assertType, clampValue, emptyFunction, ref, sync, type;
+var Event, Promise, Random, ReactiveList, ScrollChild, ScrollSection, SectionHeader, Style, Type, View, assertType, emptyFunction, ref, sync, type;
 
 require("isDev");
 
@@ -11,8 +11,6 @@ emptyFunction = require("emptyFunction");
 ReactiveList = require("ReactiveList");
 
 assertType = require("assertType");
-
-clampValue = require("clampValue");
 
 Promise = require("Promise");
 
@@ -69,7 +67,7 @@ type.defineValues(function(options) {
     _childElements: [],
     _headerElement: null,
     _headerLength: null,
-    _footerElement: null,
+    _footerElement: false,
     _footerLength: null,
     _scroll: null
   };
@@ -106,11 +104,11 @@ type.definePrototype({
     set: function(children) {
       var elements, oldChildren, section;
       assertType(children, Array);
+      section = this;
       oldChildren = this._children._array;
       oldChildren && oldChildren.forEach(function(child) {
         return section._deinitChild(child);
       });
-      section = this;
       elements = new Array(children.length);
       children.forEach(function(child, index) {
         section._initChild(child, index);
@@ -128,7 +126,8 @@ type.definePrototype({
       return this._startIndex;
     },
     set: function(newValue) {
-      return this._startIndex = clampValue(newValue, 0, this._children.length);
+      this._children._assertValidIndex(newValue);
+      return this._startIndex = newValue;
     }
   },
   endIndex: {
@@ -136,7 +135,8 @@ type.definePrototype({
       return this._endIndex;
     },
     set: function(newValue) {
-      return this._endIndex = clampValue(newValue, 0, this._children.length);
+      this._children._assertValidIndex(newValue);
+      return this._endIndex = newValue;
     }
   }
 });
@@ -183,17 +183,29 @@ type.defineMethods({
     this._childElements.splice(index, count);
     this._deinitChild(this._children.remove(index));
   },
+  setRange: function(index, length) {
+    assertType(index, Number);
+    assertType(length, Number);
+    this.startIndex = index;
+    this.endIndex = index + length;
+    return this;
+  },
   forceUpdate: function() {
     this.view && this.view.forceUpdate();
   },
   renderWhile: function(shouldRender) {
+    var maxIndex;
     if (!shouldRender()) {
+      return Promise();
+    }
+    maxIndex = this._children._length._value;
+    if (this._endIndex === maxIndex) {
       return Promise();
     }
     return this._rendering != null ? this._rendering : this._rendering = Promise.defer((function(_this) {
       return function(resolve) {
         var onLayout;
-        _this.endIndex += _this._batchSize;
+        _this._endIndex = Math.max(_this._endIndex + _this._batchSize, maxIndex);
         onLayout = _this.didLayout(1, function() {
           return _this.renderWhile(shouldRender).then(resolve);
         });
@@ -329,7 +341,7 @@ type.defineMethods({
     index = -1;
     while (++index < numChildren) {
       child = children[index];
-      if (element === false) {
+      if (elements[index] === false) {
         child._isVisible = false;
         if (beforeVisibleRange) {
           continue;
@@ -408,28 +420,24 @@ type.defineMethods({
       scroll._setContentLength(this._length);
     }
     return this.didLayout.emit();
-  },
-  _onHeaderLayout: function(layout) {
-    return this._headerLength = layout[this.scroll.axis === "x" ? "width" : "height"];
-  },
-  _onFooterLayout: function(layout) {
-    return this._footerLength = layout[this.scroll.axis === "x" ? "width" : "height"];
   }
 });
 
-type.propTypes = {
+type.defineProps({
   style: Style,
-  removeClippedSubviews: Boolean
-};
-
-type.propDefaults = {
-  removeClippedSubviews: false
-};
+  removeClippedSubviews: Boolean.withDefault(false)
+});
 
 type.render(function() {
+  var section;
+  if (this.isEmpty) {
+    section = this.__renderEmpty();
+  } else {
+    section = this.__renderSection();
+  }
   return View({
     style: this.props.style,
-    children: this._renderSection(),
+    children: section,
     removeClippedSubviews: this.props.removeClippedSubviews,
     onLayout: (function(_this) {
       return function(event) {
@@ -440,43 +448,24 @@ type.render(function() {
 });
 
 type.defineMethods({
-  _renderSection: function() {
-    var children, length;
-    if (this.isEmpty) {
-      return this.__renderEmpty();
-    }
-    length = (children = this._renderChildren()).length;
-    if (this._headerElement == null) {
-      this._headerElement = View({
-        children: this.__renderHeader(),
-        onLayout: (function(_this) {
-          return function(event) {
-            return _this._onHeaderLayout(event.nativeEvent.layout);
-          };
-        })(this)
-      });
-    }
-    if (this._children.length === length) {
-      if (this._footerElement == null) {
-        this._footerElement = View({
-          children: this.__renderFooter(),
-          onLayout: (function(_this) {
-            return function(event) {
-              return _this._onFooterLayout(event.nativeEvent.layout);
-            };
-          })(this)
-        });
-      }
-    }
-    return [this._headerElement, children, this._footerElement];
+  _renderHeader: function() {
+    return this._headerElement != null ? this._headerElement : this._headerElement = View({
+      children: this.__renderHeader(),
+      onLayout: (function(_this) {
+        return function(event) {
+          var layout;
+          layout = event.nativeEvent.layout;
+          return _this._headerLength = layout[_this.scroll.axis === "x" ? "width" : "height"];
+        };
+      })(this)
+    });
   },
-  _renderChildren: function() {
-    var children, elements, endIndex, index, length, offset, ref1, startIndex;
-    ref1 = this, startIndex = ref1.startIndex, endIndex = ref1.endIndex;
-    length = endIndex - startIndex;
+  _renderChildren: function(startIndex, endIndex) {
+    var children, elements, index, length, offset;
     children = this._children._array;
     elements = this._childElements;
     offset = -1;
+    length = endIndex - startIndex;
     while (++offset < length) {
       index = startIndex + offset;
       if (elements[index] !== false) {
@@ -485,13 +474,28 @@ type.defineMethods({
       elements[index] = children[index].render();
     }
     return elements;
+  },
+  _renderFooter: function() {
+    return this._footerElement != null ? this._footerElement : this._footerElement = View({
+      children: this.__renderFooter(),
+      onLayout: (function(_this) {
+        return function(event) {
+          var layout;
+          layout = event.nativeEvent.layout;
+          return _this._footerLength = layout[_this.scroll.axis === "x" ? "width" : "height"];
+        };
+      })(this)
+    });
   }
 });
 
 type.defineHooks({
   __renderHeader: emptyFunction.thatReturnsFalse,
   __renderFooter: emptyFunction.thatReturnsFalse,
-  __renderEmpty: emptyFunction.thatReturnsFalse
+  __renderEmpty: emptyFunction.thatReturnsFalse,
+  __renderSection: function() {
+    return [this._renderHeader(), this._renderChildren(this.startIndex, this.endIndex), this._renderFooter()];
+  }
 });
 
 module.exports = ScrollSection = type.build();

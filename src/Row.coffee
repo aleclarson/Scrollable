@@ -75,6 +75,5 @@ type.defineStyles
 
   container:
     overflow: "hidden"
-    opacity: -> @opacity
 
 module.exports = type.build()

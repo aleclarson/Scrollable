@@ -90,10 +90,7 @@ type.defineHooks({
 
 type.defineStyles({
   container: {
-    overflow: "hidden",
-    opacity: function() {
-      return this.opacity;
-    }
+    overflow: "hidden"
   }
 });
 
