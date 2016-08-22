@@ -44,7 +44,7 @@ type.defineMethods
   _onLayout: (layout) ->
     {scroll} = this
     @_offset = layout[scroll.axis]
-    @_length = layout[if scroll.axis is "x" then "width" else "height"]
+    @_length = layout[if scroll.isHorizontal then "width" else "height"]
     # @_isVisible = scroll._isAreaVisible @_offset, @_length
     #   TODO: Update visibility of nested rows.
     @_didLayout.emit()
@@ -61,11 +61,14 @@ type.render ->
     onLayout: (event) =>
       @_onLayout event.nativeEvent.layout
 
-type.willMount ->
-  @_props and @_props.row = this
+type.willUpdate ->
+  log.it @__name + ".willUpdate()"
 
-type.willUnmount ->
-  @_props and @_props.row = null
+type.willMount ->
+  @props.row = this
+
+type.willReceiveProps (props) ->
+  props.row = this
 
 type.defineHooks
 

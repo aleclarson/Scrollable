@@ -1,8 +1,10 @@
-var ArrayOf, Children, Device, Draggable, Nan, NativeValue, Null, Rubberband, Section, Style, Type, View, assertType, clampValue, emptyFunction, isType, ref, type;
+var ArrayOf, Children, Device, Draggable, NativeValue, Null, Number, NumberOrNull, Rubberband, Section, Style, Type, View, assertType, clampValue, emptyFunction, isType, ref, type;
 
 ref = require("modx"), Type = ref.Type, Device = ref.Device, Style = ref.Style, Children = ref.Children;
 
 NativeValue = require("modx/native").NativeValue;
+
+Number = require("Nan").Number;
 
 View = require("modx/views").View;
 
@@ -22,9 +24,9 @@ isType = require("isType");
 
 Null = require("Null");
 
-Nan = require("Nan");
-
 Section = require("./Section");
+
+NumberOrNull = Number.or(Null);
 
 type = Type("Scrollable");
 
@@ -35,7 +37,7 @@ type.defineOptions({
   visibleThreshold: Number.withDefault(0),
   stretchLimit: Number,
   elasticity: Number.withDefault(0.7),
-  section: Section
+  children: Section.Kind
 });
 
 type.defineStatics({
@@ -66,7 +68,7 @@ type.defineReactiveValues({
 type.defineValues(function(options) {
   return {
     visibleThreshold: options.visibleThreshold,
-    _section: null,
+    _children: null,
     _edgeOffset: null,
     _maxOffset: null
   };
@@ -93,13 +95,13 @@ type.defineFrozenValues(function(options) {
 });
 
 type.initInstance(function(options) {
-  this.section = options.section || null;
+  this.children = options.children || null;
 });
 
 type.defineEvents({
   didLayout: {
-    newValue: [Number, Null],
-    oldValue: [Number, Null]
+    newValue: NumberOrNull,
+    oldValue: NumberOrNull
   },
   didScroll: {
     offset: Number
@@ -110,6 +112,9 @@ type.defineEvents({
 type.defineGetters({
   axis: function() {
     return this._drag.axis;
+  },
+  isHorizontal: function() {
+    return this._drag.isHorizontal;
   },
   gesture: function() {
     return this._drag.gesture;
@@ -156,25 +161,26 @@ type.defineGetters({
 });
 
 type.definePrototype({
-  section: {
+  children: {
     get: function() {
-      return this._section;
+      return this._children;
     },
-    set: function(section) {
+    set: function(newValue) {
       var oldValue;
-      if (oldValue = this._section) {
-        if (oldValue === section) {
+      if (oldValue = this._children) {
+        if (oldValue === newValue) {
           return;
         }
-        section._isVisible = null;
-        section._index = null;
-        section._scroll = null;
+        oldValue._isVisible = null;
+        oldValue._index = null;
+        oldValue._scroll = null;
       }
-      if (section) {
-        section._isVisible = true;
-        section._index = 0;
-        section._scroll = this;
-        return this._section = section;
+      if (newValue) {
+        assertType(newValue, Section.Kind);
+        newValue._isVisible = true;
+        newValue._index = 0;
+        newValue._scroll = this;
+        return this._children = newValue;
       }
     }
   },
@@ -291,7 +297,7 @@ type.defineBoundMethods({
     maxOffset = this._maxOffset || 0;
     if (this.inBounds) {
       this._updateReachedEnd(offset, maxOffset);
-      this._section && this._section.updateVisibleRange();
+      this._children && this._children.updateVisibleRange();
     }
     this.__onScroll(offset, maxOffset);
     return this._events.emit("didScroll", [offset]);
@@ -354,49 +360,50 @@ type.defineProps({
   children: Children
 });
 
-type.defineNativeValues(function() {
+type.defineReactions(function() {
   return {
-    _edgeDelta: (function(_this) {
-      return function() {
-        var maxOffset, minOffset, offset;
-        offset = 0 - _this._drag.offset.value;
-        if (offset < (minOffset = _this.minOffset)) {
-          _this._edgeOffset = minOffset;
-          _this._edge.delta = minOffset - offset;
-        } else if (offset > (maxOffset = _this._maxOffset || 0)) {
-          _this._edgeOffset = maxOffset;
-          _this._edge.delta = offset - maxOffset;
-        } else {
+    _edgeDelta: {
+      get: (function(_this) {
+        return function() {
+          var maxOffset, minOffset, offset;
+          offset = 0 - _this._drag.offset.value;
+          if (offset < (minOffset = _this.minOffset)) {
+            _this._edgeOffset = minOffset;
+            return minOffset - offset;
+          }
+          if (offset > (maxOffset = _this._maxOffset || 0)) {
+            _this._edgeOffset = maxOffset;
+            return offset - maxOffset;
+          }
           _this._edgeOffset = null;
-          _this._edge.delta = 0;
-        }
-      };
-    })(this),
-    _offset: (function(_this) {
-      return function() {
-        var maxOffset, minOffset, offset;
-        offset = 0 - _this._drag.offset.value;
-        minOffset = _this.minOffset;
-        maxOffset = _this._maxOffset || 0;
-        offset = _this.__computeOffset(offset, minOffset, maxOffset);
-        if (Nan.test(offset)) {
-          throw Error("Unexpected NaN value!");
-        }
-        if (!isType(offset, Number)) {
-          throw TypeError("'__computeOffset' must return a Number!");
-        }
-        return Device.round(0 - offset);
-      };
-    })(this),
-    _pointerEvents: (function(_this) {
-      return function() {
-        if (_this.isTouchable) {
-          return "auto";
-        }
-        return "none";
-      };
-    })(this)
+          return 0;
+        };
+      })(this),
+      didSet: (function(_this) {
+        return function(delta) {
+          return _this._edge.delta = delta;
+        };
+      })(this)
+    }
   };
+});
+
+type.defineNativeValues({
+  _offset: function() {
+    var maxOffset, minOffset, offset;
+    offset = 0 - this._drag.offset.value;
+    minOffset = this.minOffset;
+    maxOffset = this._maxOffset || 0;
+    offset = this.__computeOffset(offset, minOffset, maxOffset);
+    assertType(offset, Number);
+    return Device.round(0 - offset);
+  },
+  _pointerEvents: function() {
+    if (this.isTouchable) {
+      return "auto";
+    }
+    return "none";
+  }
 });
 
 type.defineListeners(function() {
@@ -414,19 +421,19 @@ type.defineStyles({
     alignItems: "stretch",
     justifyContent: "flex-start",
     flexDirection: function() {
-      if (this.axis === "x") {
+      if (this.isHorizontal) {
         return "row";
       } else {
         return "column";
       }
     },
     translateX: function() {
-      if (this.axis === "x") {
+      if (this.isHorizontal) {
         return this._offset;
       }
     },
     translateY: function() {
-      if (this.axis === "y") {
+      if (!this.isHorizontal) {
         return this._offset;
       }
     }
@@ -447,7 +454,7 @@ type.render(function() {
       return function(event) {
         var key, layout;
         layout = event.nativeEvent.layout;
-        key = _this.axis === "x" ? "width" : "height";
+        key = _this.isHorizontal ? "width" : "height";
         return _this._setVisibleLength(layout[key]);
       };
     })(this)
@@ -456,8 +463,8 @@ type.render(function() {
 
 type.defineHooks({
   __renderContents: function() {
-    if (this._section) {
-      return this._section.render({
+    if (this._children) {
+      return this._children.render({
         style: this.styles.contents()
       });
     }
@@ -468,7 +475,7 @@ type.defineHooks({
         return function(event) {
           var key, layout;
           layout = event.nativeEvent.layout;
-          key = _this.axis === "x" ? "width" : "height";
+          key = _this.isHorizontal ? "width" : "height";
           return _this._setContentLength(layout[key]);
         };
       })(this)

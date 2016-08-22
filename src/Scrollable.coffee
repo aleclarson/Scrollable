@@ -1,6 +1,7 @@
 
 {Type, Device, Style, Children} = require "modx"
 {NativeValue} = require "modx/native"
+{Number} = require "Nan"
 {View} = require "modx/views"
 
 emptyFunction = require "emptyFunction"
@@ -11,9 +12,10 @@ Draggable = require "Draggable"
 ArrayOf = require "ArrayOf"
 isType = require "isType"
 Null = require "Null"
-Nan = require "Nan"
 
 Section = require "./Section"
+
+NumberOrNull = Number.or Null
 
 type = Type "Scrollable"
 
@@ -24,7 +26,7 @@ type.defineOptions
   visibleThreshold: Number.withDefault 0
   stretchLimit: Number
   elasticity: Number.withDefault 0.7
-  section: Section
+  children: Section.Kind
 
 type.defineStatics
 
@@ -48,7 +50,7 @@ type.defineValues (options) ->
 
   visibleThreshold: options.visibleThreshold
 
-  _section: null
+  _children: null
 
   _edgeOffset: null
 
@@ -69,7 +71,7 @@ type.defineFrozenValues (options) ->
     elasticity: options.elasticity
 
 type.initInstance (options) ->
-  @section = options.section or null
+  @children = options.children or null
   return
 
 #
@@ -79,8 +81,8 @@ type.initInstance (options) ->
 type.defineEvents
 
   didLayout:
-    newValue: [ Number, Null ]
-    oldValue: [ Number, Null ]
+    newValue: NumberOrNull
+    oldValue: NumberOrNull
 
   didScroll:
     offset: Number
@@ -90,6 +92,8 @@ type.defineEvents
 type.defineGetters
 
   axis: -> @_drag.axis
+
+  isHorizontal: -> @_drag.isHorizontal
 
   gesture: -> @_drag.gesture
 
@@ -121,21 +125,22 @@ type.defineGetters
 
 type.definePrototype
 
-  section:
-    get: -> @_section
-    set: (section) ->
+  children:
+    get: -> @_children
+    set: (newValue) ->
 
-      if oldValue = @_section
-        return if oldValue is section
-        section._isVisible = null
-        section._index = null
-        section._scroll = null
+      if oldValue = @_children
+        return if oldValue is newValue
+        oldValue._isVisible = null
+        oldValue._index = null
+        oldValue._scroll = null
 
-      if section
-        section._isVisible = yes
-        section._index = 0
-        section._scroll = this
-        @_section = section
+      if newValue
+        assertType newValue, Section.Kind
+        newValue._isVisible = yes
+        newValue._index = 0
+        newValue._scroll = this
+        @_children = newValue
 
   offset:
     get: -> 0 - @_offset.value
@@ -224,9 +229,11 @@ type.defineBoundMethods
 
   _onScroll: (offset) ->
     maxOffset = @_maxOffset or 0
+
     if @inBounds
       @_updateReachedEnd offset, maxOffset
-      @_section and @_section.updateVisibleRange()
+      @_children and @_children.updateVisibleRange()
+
     @__onScroll offset, maxOffset
     @_events.emit "didScroll", [offset]
 
@@ -294,38 +301,41 @@ type.defineProps
   style: Style
   children: Children
 
-type.defineNativeValues ->
+type.defineReactions ->
 
-  _edgeDelta: =>
-    offset = 0 - @_drag.offset.value
-    if offset < (minOffset = @minOffset)
-      @_edgeOffset = minOffset
-      @_edge.delta = minOffset - offset
-    else if offset > (maxOffset = @_maxOffset or 0)
-      @_edgeOffset = maxOffset
-      @_edge.delta = offset - maxOffset
-    else
+  _edgeDelta:
+
+    get: =>
+      offset = 0 - @_drag.offset.value
+
+      if offset < (minOffset = @minOffset)
+        @_edgeOffset = minOffset
+        return minOffset - offset
+
+      if offset > (maxOffset = @_maxOffset or 0)
+        @_edgeOffset = maxOffset
+        return offset - maxOffset
+
       @_edgeOffset = null
-      @_edge.delta = 0
-    return
+      return 0
 
-  _offset: =>
+    didSet: (delta) =>
+      @_edge.delta = delta
+
+type.defineNativeValues
+
+  _offset: ->
 
     offset = 0 - @_drag.offset.value
     minOffset = @minOffset
     maxOffset = @_maxOffset or 0
 
     offset = @__computeOffset offset, minOffset, maxOffset
-
-    if Nan.test offset
-      throw Error "Unexpected NaN value!"
-
-    if not isType offset, Number
-      throw TypeError "'__computeOffset' must return a Number!"
+    assertType offset, Number
 
     return Device.round 0 - offset
 
-  _pointerEvents: =>
+  _pointerEvents: ->
     return "auto" if @isTouchable
     return "none"
 
@@ -343,9 +353,9 @@ type.defineStyles
   contents:
     alignItems: "stretch"
     justifyContent: "flex-start"
-    flexDirection: -> if @axis is "x" then "row" else "column"
-    translateX: -> @_offset if @axis is "x"
-    translateY: -> @_offset if @axis is "y"
+    flexDirection: -> if @isHorizontal then "row" else "column"
+    translateX: -> @_offset if @isHorizontal
+    translateY: -> @_offset if not @isHorizontal
 
 type.render ->
   return View
@@ -355,15 +365,15 @@ type.render ->
     mixins: [ @_drag.touchHandlers ]
     onLayout: (event) =>
       {layout} = event.nativeEvent
-      key = if @axis is "x" then "width" else "height"
+      key = if @isHorizontal then "width" else "height"
       @_setVisibleLength layout[key]
 
 type.defineHooks
 
   __renderContents: ->
 
-    if @_section
-      return @_section.render
+    if @_children
+      return @_children.render
         style: @styles.contents()
 
     return View
@@ -371,7 +381,7 @@ type.defineHooks
       children: @props.children
       onLayout: (event) =>
         {layout} = event.nativeEvent
-        key = if @axis is "x" then "width" else "height"
+        key = if @isHorizontal then "width" else "height"
         @_setContentLength layout[key]
 
 module.exports = type.build()

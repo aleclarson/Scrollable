@@ -54,9 +54,12 @@ type.defineValues (options) ->
 
   _batchSize: options.batchSize
 
-  _startIndex: options.startIndex
+  _mountedRange: [
+    options.startIndex
+    options.endIndex
+  ]
 
-  _endIndex: options.endIndex
+  _visibleRange: []
 
   _rendering: null
 
@@ -64,7 +67,7 @@ type.defineValues (options) ->
 
   _childElements: []
 
-  _headerElement: null
+  _headerElement: no
 
   _headerLength: null
 
@@ -74,60 +77,31 @@ type.defineValues (options) ->
 
   _scroll: null
 
-type.defineReactiveValues
-
-  _firstVisibleIndex: null
-
-  _lastVisibleIndex: null
-
 type.defineGetters
+
+  array: -> @_children.array
 
   isEmpty: -> @_children.isEmpty
 
-  firstVisibleIndex: -> @_firstVisibleIndex
-
-  lastVisibleIndex: -> @_lastVisibleIndex
+  visibleRange: -> @_visibleRange.slice()
 
   scroll: -> @_scroll
 
-  _isRoot: -> this is @_scroll._section
+  _isRoot: -> this is @_scroll._children
 
 type.definePrototype
 
-  children:
-    get: -> @_children.array
-    set: (children) ->
-      assertType children, Array
-      section = this
-
-      oldChildren = @_children._array
-      oldChildren and oldChildren.forEach (child) ->
-        section._deinitChild child
-
-      elements = new Array children.length
-      children.forEach (child, index) ->
-        section._initChild child, index
-        elements[index] = no
-
-      @_firstVisibleIndex = null
-      @_lastVisibleIndex = null
-      @_isRoot and @_scroll._setContentLength null
-
-      @_children.array = children
-      @_childElements = elements
-      return
-
   startIndex:
-    get: -> @_startIndex
-    set: (newValue) ->
-      @_children._assertValidIndex newValue
-      @_startIndex = newValue
+    get: -> @_mountedRange[0]
+    set: (index) ->
+      @_children._assertValidIndex index
+      @_mountedRange[0] = index
 
   endIndex:
-    get: -> @_endIndex
-    set: (newValue) ->
-      @_children._assertValidIndex newValue
-      @_endIndex = newValue
+    get: -> @_mountedRange[1]
+    set: (index) ->
+      @_children._assertValidIndex index
+      @_mountedRange[1] = index
 
 type.defineMethods
 
@@ -170,18 +144,38 @@ type.defineMethods
 
     children = @_children._array
     sync.repeat @_children.length - index, (offset) ->
-      children[startIndex + offset]._index -= 1
+      children[index + offset]._index -= 1
 
     @_childElements.splice index, count
     @_deinitChild @_children.remove index
     return
 
-  setRange: (index, length) ->
+  replaceAll: (children) ->
+    assertType children, Array
+    section = this
+
+    oldChildren = @_children._array
+    oldChildren and oldChildren.forEach (child) ->
+      section._deinitChild child
+
+    elements = new Array children.length
+    children.forEach (child, index) ->
+      section._initChild child, index
+      elements[index] = no
+
+    @_visibleRange.length = 0
+    @_isRoot and @_scroll._setContentLength null
+
+    @_children.array = children
+    @_childElements = elements
+    return
+
+  updateRange: (index, length) ->
     assertType index, Number
     assertType length, Number
-    @startIndex = index
-    @endIndex = index + length
-    return this
+    @_mountedRange = [index, index + length]
+    @forceUpdate()
+    return
 
   forceUpdate: ->
     @view and @view.forceUpdate()
@@ -191,10 +185,10 @@ type.defineMethods
   renderWhile: (shouldRender) ->
     return Promise() unless shouldRender()
     maxIndex = @_children._length._value
-    return Promise() if @_endIndex is maxIndex
+    return Promise() if @endIndex is maxIndex
     return @_rendering ?= Promise.defer (resolve) =>
 
-      @_endIndex = Math.max @_endIndex + @_batchSize, maxIndex
+      @endIndex = Math.max @endIndex + @_batchSize, maxIndex
 
       # TODO: Implement trimming to save memory.
       # if (@endIndex - @startIndex) >= @renderLimit
@@ -221,9 +215,9 @@ type.defineMethods
   updateVisibleRange: ->
     startOffset = @_scroll.offset
     endOffset = startOffset + @_scroll.visibleLength
-    if @_firstVisibleIndex is null
-      @_initVisibleRange startOffset, endOffset
-    else @_updateVisibleRange startOffset, endOffset
+    if @_visibleRange.length
+      @_updateVisibleRange startOffset, endOffset
+    else @_initVisibleRange startOffset, endOffset
 
   _initChild: (child, index) ->
 
@@ -303,7 +297,7 @@ type.defineMethods
   _renderWhileVisible: ->
     scroll = @_scroll
     @renderWhile =>
-      return no if @_endIndex is @_children.length
+      return no if @endIndex is @_children.length
       endLength = scroll.offset + scroll.visibleLength + scroll.visibleThreshold
       return scroll.contentLength < endLength
 
@@ -315,8 +309,8 @@ type.defineMethods
     return offset + length > startOffset
 
   _getVisibleChildren: ->
-    return null if @_firstVisibleIndex is null
-    return @_children.array.slice @_firstVisibleIndex, @_lastVisibleIndex + 1
+    return null if not @_visibleRange.length
+    return @_children.array.slice @_visibleRange[0], @_visibleRange[1] + 1
 
   # Computes the visible range from scratch.
   # TODO: Make this more performant?
@@ -325,7 +319,7 @@ type.defineMethods
     numChildren = @_children.length
 
     # TODO: Use an `estimatedRowSize` with `startOffset`
-    #   to help find the `firstVisibleIndex` faster.
+    #   to help find `visibleRange[0]` faster.
     beforeVisibleRange = yes
     lastVisibleIndex = null
 
@@ -354,56 +348,59 @@ type.defineMethods
 
       if beforeVisibleRange
         beforeVisibleRange = no
-        @_firstVisibleIndex = index
+        @_visibleRange[0] = index
 
-    @_firstVisibleIndex = null if beforeVisibleRange
-    @_lastVisibleIndex = lastVisibleIndex
+    if beforeVisibleRange
+      @_visibleRange.length = 0
+      return
+
+    @_visibleRange[1] = lastVisibleIndex
     return
 
   # Updates the visible range using its existing values.
   _updateVisibleRange: (startOffset, endOffset) ->
 
-    if @_firstVisibleIndex is null
+    if not @_visibleRange.length
       return @_initVisibleRange startOffset, endOffset
 
     children = @_children._array
 
     # Find children outside the visible range
     # that are >= the "first visible index".
-    index = startIndex = @_firstVisibleIndex
+    index = startIndex = @_visibleRange[0]
     while child = children[index]
       break if (child.offset + child.length) > startOffset
-      @_firstVisibleIndex = index
+      @_visibleRange[0] = index
       index += 1
 
     # If the "first visible index" did not change...
-    if @_firstVisibleIndex is startIndex
+    if @_visibleRange[0] is startIndex
 
       # Find children inside the visible range
       # that are < the "first visible index".
-      index = @_firstVisibleIndex - 1
+      index = startIndex - 1
       while child = children[index]
         break if (child.offset + child.length) < startOffset
-        @_firstVisibleIndex = index
+        @_visibleRange[0] = index
         index -= 1
 
     # Find children outside the visible range
     # that are <= the "last visible index".
-    index = startIndex = @_lastVisibleIndex
+    index = startIndex = @_visibleRange[1]
     while child = children[index]
       break if child.offset < endOffset
-      @_lastVisibleIndex = index
+      @_visibleRange[1] = index
       index -= 1
 
     # If the "last visible index" did not change...
-    if @_lastVisibleIndex is startIndex
+    if @_visibleRange[1] is startIndex
 
       # Find children inside the visible range
       # that are > the "last visible index".
-      index = @_lastVisibleIndex + 1
+      index = startIndex + 1
       while child = children[index]
         break if child.offset > endOffset
-        @_lastVisibleIndex = index
+        @_visibleRange[1] = index
         index += 1
 
     return
@@ -411,11 +408,14 @@ type.defineMethods
   _onLayout: (layout) ->
     {scroll} = this
     @_offset = layout[scroll.axis]
-    @_length = layout[if scroll.axis is "x" then "width" else "height"]
+    @_length = layout[if scroll.isHorizontal then "width" else "height"]
     if @_isRoot then scroll._setContentLength @_length
-    # else @_isVisible = scroll._isAreaVisible @_offset, @_length
     #   TODO: Update visibility of nested sections.
+    # else @_isVisible = scroll._isAreaVisible @_offset, @_length
     @didLayout.emit()
+
+type.willUpdate ->
+  log.it @__name + ".willUpdate()"
 
 #
 # Rendering
@@ -426,10 +426,11 @@ type.defineProps
   removeClippedSubviews: Boolean.withDefault no # TODO: Should this be `yes`?
 
 type.render ->
-  if @isEmpty
-    section = @__renderEmpty()
-  else
-    section = @__renderSection()
+
+  section =
+    if @isEmpty then @__renderEmpty()
+    else @__renderSection()
+
   return View
     style: @props.style
     children: section
@@ -439,33 +440,40 @@ type.render ->
 type.defineMethods
 
   _renderHeader: ->
-    return @_headerElement ?= View
+
+    if @_headerElement isnt no
+      return @_headerElement
+
+    return @_headerElement = View
       children: @__renderHeader()
       onLayout: (event) =>
         {layout} = event.nativeEvent
-        @_headerLength = layout[if @scroll.axis is "x" then "width" else "height"]
+        @_headerLength = layout[if @scroll.isHorizontal then "width" else "height"]
 
   _renderChildren: (startIndex, endIndex) ->
+    length = endIndex - startIndex
+
     children = @_children._array
     elements = @_childElements
-
-    # TODO: Only iterate the unmounted children?
     offset = -1
-    length = endIndex - startIndex
     while ++offset < length
       index = startIndex + offset
-      continue if elements[index] isnt no
-      elements[index] = children[index].render()
+      if elements[index] is no
+        elements[index] = children[index].render()
 
     # TODO: Hide mounted children that are not in the active range?
     return elements
 
   _renderFooter: ->
-    return @_footerElement ?= View
+
+    if @_footerElement isnt no
+      return @_footerElement
+
+    return @_footerElement = View
       children: @__renderFooter()
       onLayout: (event) =>
         {layout} = event.nativeEvent
-        @_footerLength = layout[if @scroll.axis is "x" then "width" else "height"]
+        @_footerLength = layout[if @scroll.isHorizontal then "width" else "height"]
 
 type.defineHooks
 

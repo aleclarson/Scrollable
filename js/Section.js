@@ -60,12 +60,12 @@ type.defineFrozenValues(function(options) {
 type.defineValues(function(options) {
   return {
     _batchSize: options.batchSize,
-    _startIndex: options.startIndex,
-    _endIndex: options.endIndex,
+    _mountedRange: [options.startIndex, options.endIndex],
+    _visibleRange: [],
     _rendering: null,
     _children: ReactiveList(),
     _childElements: [],
-    _headerElement: null,
+    _headerElement: false,
     _headerLength: null,
     _footerElement: false,
     _footerLength: null,
@@ -73,70 +73,41 @@ type.defineValues(function(options) {
   };
 });
 
-type.defineReactiveValues({
-  _firstVisibleIndex: null,
-  _lastVisibleIndex: null
-});
-
 type.defineGetters({
+  array: function() {
+    return this._children.array;
+  },
   isEmpty: function() {
     return this._children.isEmpty;
   },
-  firstVisibleIndex: function() {
-    return this._firstVisibleIndex;
-  },
-  lastVisibleIndex: function() {
-    return this._lastVisibleIndex;
+  visibleRange: function() {
+    return this._visibleRange.slice();
   },
   scroll: function() {
     return this._scroll;
   },
   _isRoot: function() {
-    return this === this._scroll._section;
+    return this === this._scroll._children;
   }
 });
 
 type.definePrototype({
-  children: {
-    get: function() {
-      return this._children.array;
-    },
-    set: function(children) {
-      var elements, oldChildren, section;
-      assertType(children, Array);
-      section = this;
-      oldChildren = this._children._array;
-      oldChildren && oldChildren.forEach(function(child) {
-        return section._deinitChild(child);
-      });
-      elements = new Array(children.length);
-      children.forEach(function(child, index) {
-        section._initChild(child, index);
-        return elements[index] = false;
-      });
-      this._firstVisibleIndex = null;
-      this._lastVisibleIndex = null;
-      this._isRoot && this._scroll._setContentLength(null);
-      this._children.array = children;
-      this._childElements = elements;
-    }
-  },
   startIndex: {
     get: function() {
-      return this._startIndex;
+      return this._mountedRange[0];
     },
-    set: function(newValue) {
-      this._children._assertValidIndex(newValue);
-      return this._startIndex = newValue;
+    set: function(index) {
+      this._children._assertValidIndex(index);
+      return this._mountedRange[0] = index;
     }
   },
   endIndex: {
     get: function() {
-      return this._endIndex;
+      return this._mountedRange[1];
     },
-    set: function(newValue) {
-      this._children._assertValidIndex(newValue);
-      return this._endIndex = newValue;
+    set: function(index) {
+      this._children._assertValidIndex(index);
+      return this._mountedRange[1] = index;
     }
   }
 });
@@ -178,17 +149,34 @@ type.defineMethods({
     isDev && this._children._assertValidIndex(index);
     children = this._children._array;
     sync.repeat(this._children.length - index, function(offset) {
-      return children[startIndex + offset]._index -= 1;
+      return children[index + offset]._index -= 1;
     });
     this._childElements.splice(index, count);
     this._deinitChild(this._children.remove(index));
   },
-  setRange: function(index, length) {
+  replaceAll: function(children) {
+    var elements, oldChildren, section;
+    assertType(children, Array);
+    section = this;
+    oldChildren = this._children._array;
+    oldChildren && oldChildren.forEach(function(child) {
+      return section._deinitChild(child);
+    });
+    elements = new Array(children.length);
+    children.forEach(function(child, index) {
+      section._initChild(child, index);
+      return elements[index] = false;
+    });
+    this._visibleRange.length = 0;
+    this._isRoot && this._scroll._setContentLength(null);
+    this._children.array = children;
+    this._childElements = elements;
+  },
+  updateRange: function(index, length) {
     assertType(index, Number);
     assertType(length, Number);
-    this.startIndex = index;
-    this.endIndex = index + length;
-    return this;
+    this._mountedRange = [index, index + length];
+    this.forceUpdate();
   },
   forceUpdate: function() {
     this.view && this.view.forceUpdate();
@@ -199,13 +187,13 @@ type.defineMethods({
       return Promise();
     }
     maxIndex = this._children._length._value;
-    if (this._endIndex === maxIndex) {
+    if (this.endIndex === maxIndex) {
       return Promise();
     }
     return this._rendering != null ? this._rendering : this._rendering = Promise.defer((function(_this) {
       return function(resolve) {
         var onLayout;
-        _this._endIndex = Math.max(_this._endIndex + _this._batchSize, maxIndex);
+        _this.endIndex = Math.max(_this.endIndex + _this._batchSize, maxIndex);
         onLayout = _this.didLayout(1, function() {
           return _this.renderWhile(shouldRender).then(resolve);
         });
@@ -230,10 +218,10 @@ type.defineMethods({
     var endOffset, startOffset;
     startOffset = this._scroll.offset;
     endOffset = startOffset + this._scroll.visibleLength;
-    if (this._firstVisibleIndex === null) {
-      return this._initVisibleRange(startOffset, endOffset);
-    } else {
+    if (this._visibleRange.length) {
       return this._updateVisibleRange(startOffset, endOffset);
+    } else {
+      return this._initVisibleRange(startOffset, endOffset);
     }
   },
   _initChild: function(child, index) {
@@ -305,7 +293,7 @@ type.defineMethods({
     return this.renderWhile((function(_this) {
       return function() {
         var endLength;
-        if (_this._endIndex === _this._children.length) {
+        if (_this.endIndex === _this._children.length) {
           return false;
         }
         endLength = scroll.offset + scroll.visibleLength + scroll.visibleThreshold;
@@ -326,10 +314,10 @@ type.defineMethods({
     return offset + length > startOffset;
   },
   _getVisibleChildren: function() {
-    if (this._firstVisibleIndex === null) {
+    if (!this._visibleRange.length) {
       return null;
     }
-    return this._children.array.slice(this._firstVisibleIndex, this._lastVisibleIndex + 1);
+    return this._children.array.slice(this._visibleRange[0], this._visibleRange[1] + 1);
   },
   _initVisibleRange: function(startOffset, endOffset) {
     var beforeVisibleRange, child, children, elements, index, isHidden, lastVisibleIndex, numChildren;
@@ -360,53 +348,54 @@ type.defineMethods({
       lastVisibleIndex = index;
       if (beforeVisibleRange) {
         beforeVisibleRange = false;
-        this._firstVisibleIndex = index;
+        this._visibleRange[0] = index;
       }
     }
     if (beforeVisibleRange) {
-      this._firstVisibleIndex = null;
+      this._visibleRange.length = 0;
+      return;
     }
-    this._lastVisibleIndex = lastVisibleIndex;
+    this._visibleRange[1] = lastVisibleIndex;
   },
   _updateVisibleRange: function(startOffset, endOffset) {
     var child, children, index, startIndex;
-    if (this._firstVisibleIndex === null) {
+    if (!this._visibleRange.length) {
       return this._initVisibleRange(startOffset, endOffset);
     }
     children = this._children._array;
-    index = startIndex = this._firstVisibleIndex;
+    index = startIndex = this._visibleRange[0];
     while (child = children[index]) {
       if ((child.offset + child.length) > startOffset) {
         break;
       }
-      this._firstVisibleIndex = index;
+      this._visibleRange[0] = index;
       index += 1;
     }
-    if (this._firstVisibleIndex === startIndex) {
-      index = this._firstVisibleIndex - 1;
+    if (this._visibleRange[0] === startIndex) {
+      index = startIndex - 1;
       while (child = children[index]) {
         if ((child.offset + child.length) < startOffset) {
           break;
         }
-        this._firstVisibleIndex = index;
+        this._visibleRange[0] = index;
         index -= 1;
       }
     }
-    index = startIndex = this._lastVisibleIndex;
+    index = startIndex = this._visibleRange[1];
     while (child = children[index]) {
       if (child.offset < endOffset) {
         break;
       }
-      this._lastVisibleIndex = index;
+      this._visibleRange[1] = index;
       index -= 1;
     }
-    if (this._lastVisibleIndex === startIndex) {
-      index = this._lastVisibleIndex + 1;
+    if (this._visibleRange[1] === startIndex) {
+      index = startIndex + 1;
       while (child = children[index]) {
         if (child.offset > endOffset) {
           break;
         }
-        this._lastVisibleIndex = index;
+        this._visibleRange[1] = index;
         index += 1;
       }
     }
@@ -415,12 +404,16 @@ type.defineMethods({
     var scroll;
     scroll = this.scroll;
     this._offset = layout[scroll.axis];
-    this._length = layout[scroll.axis === "x" ? "width" : "height"];
+    this._length = layout[scroll.isHorizontal ? "width" : "height"];
     if (this._isRoot) {
       scroll._setContentLength(this._length);
     }
     return this.didLayout.emit();
   }
+});
+
+type.willUpdate(function() {
+  return log.it(this.__name + ".willUpdate()");
 });
 
 type.defineProps({
@@ -430,11 +423,7 @@ type.defineProps({
 
 type.render(function() {
   var section;
-  if (this.isEmpty) {
-    section = this.__renderEmpty();
-  } else {
-    section = this.__renderSection();
-  }
+  section = this.isEmpty ? this.__renderEmpty() : this.__renderSection();
   return View({
     style: this.props.style,
     children: section,
@@ -449,40 +438,45 @@ type.render(function() {
 
 type.defineMethods({
   _renderHeader: function() {
-    return this._headerElement != null ? this._headerElement : this._headerElement = View({
+    if (this._headerElement !== false) {
+      return this._headerElement;
+    }
+    return this._headerElement = View({
       children: this.__renderHeader(),
       onLayout: (function(_this) {
         return function(event) {
           var layout;
           layout = event.nativeEvent.layout;
-          return _this._headerLength = layout[_this.scroll.axis === "x" ? "width" : "height"];
+          return _this._headerLength = layout[_this.scroll.isHorizontal ? "width" : "height"];
         };
       })(this)
     });
   },
   _renderChildren: function(startIndex, endIndex) {
     var children, elements, index, length, offset;
+    length = endIndex - startIndex;
     children = this._children._array;
     elements = this._childElements;
     offset = -1;
-    length = endIndex - startIndex;
     while (++offset < length) {
       index = startIndex + offset;
-      if (elements[index] !== false) {
-        continue;
+      if (elements[index] === false) {
+        elements[index] = children[index].render();
       }
-      elements[index] = children[index].render();
     }
     return elements;
   },
   _renderFooter: function() {
-    return this._footerElement != null ? this._footerElement : this._footerElement = View({
+    if (this._footerElement !== false) {
+      return this._footerElement;
+    }
+    return this._footerElement = View({
       children: this.__renderFooter(),
       onLayout: (function(_this) {
         return function(event) {
           var layout;
           layout = event.nativeEvent.layout;
-          return _this._footerLength = layout[_this.scroll.axis === "x" ? "width" : "height"];
+          return _this._footerLength = layout[_this.scroll.isHorizontal ? "width" : "height"];
         };
       })(this)
     });

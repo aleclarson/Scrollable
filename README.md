@@ -117,7 +117,7 @@ scroll.stopScrolling()
 content:
   alignItems: "stretch"
   justifyContent: "flex-start"
-  flexDirection: -> if @axis is "x" then "row" else "column"
+  flexDirection: -> if @isHorizontal then "row" else "column"
   translateX: # <= Reacts to 'offset' if 'axis' equals "x"
   translateY: # <= Reacts to 'offset' if 'axis' equals "y"
 

@@ -58,7 +58,7 @@ type.defineMethods({
     var scroll;
     scroll = this.scroll;
     this._offset = layout[scroll.axis];
-    this._length = layout[scroll.axis === "x" ? "width" : "height"];
+    this._length = layout[scroll.isHorizontal ? "width" : "height"];
     return this._didLayout.emit();
   }
 });
@@ -76,12 +76,16 @@ type.render(function() {
   });
 });
 
-type.willMount(function() {
-  return this._props && (this._props.row = this);
+type.willUpdate(function() {
+  return log.it(this.__name + ".willUpdate()");
 });
 
-type.willUnmount(function() {
-  return this._props && (this._props.row = null);
+type.willMount(function() {
+  return this.props.row = this;
+});
+
+type.willReceiveProps(function(props) {
+  return props.row = this;
 });
 
 type.defineHooks({
