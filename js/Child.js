@@ -17,9 +17,42 @@ type.defineValues({
 
 type.defineReactiveValues({
   _index: null,
-  _offset: null,
-  _length: null,
   _isVisible: null
+});
+
+type.defineProperties({
+  _offset: {
+    value: null,
+    reactive: true,
+    didSet: function(newOffset, oldOffset) {
+      if (newOffset === oldOffset) {
+        return;
+      }
+      log.it(this.__name + ".offset = " + newOffset);
+      return this.__onOffsetChange(newOffset, oldOffset);
+    }
+  },
+  _length: {
+    value: 0,
+    reactive: true,
+    didSet: function(newLength, oldLength) {
+      if (newLength === oldLength) {
+        return;
+      }
+      log.it(this.__name + ".length = " + newLength);
+      return this.__onLengthChange(newLength, oldLength);
+    }
+  },
+  _section: {
+    value: null,
+    didSet: function(newSection, oldSection) {
+      if (newSection === oldSection) {
+        return;
+      }
+      oldSection && this.__onRemove();
+      newSection && this.__onInsert();
+    }
+  }
 });
 
 type.defineGetters({
@@ -38,27 +71,25 @@ type.defineGetters({
   section: function() {
     return this._section;
   },
+  scroll: function() {
+    return this._section.scroll;
+  },
   didLayout: function() {
     return this._didLayout.listenable;
   }
 });
 
-type.defineMethods({
-  _setSection: function(newValue) {
-    var oldValue;
-    oldValue = this._section;
-    if (newValue && oldValue) {
-      throw Error("Must set section to null first!");
-    }
-    if (this._section = newValue) {
-      this.__onInsert();
-    } else if (oldValue) {
-      this.__onRemove();
-    }
-  }
-});
-
 type.defineHooks({
+  __onOffsetChange: function(newOffset) {
+    var childBelow;
+    if (this._length === null) {
+      return;
+    }
+    if (childBelow = this._section.get(this.index + 1)) {
+      childBelow._offset = newOffset + this._length;
+    }
+  },
+  __onLengthChange: emptyFunction,
   __onInsert: emptyFunction,
   __onRemove: emptyFunction
 });

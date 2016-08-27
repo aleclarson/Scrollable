@@ -44,22 +44,23 @@ type.defineValues({
   }
 });
 
-type.defineGetters({
-  scroll: function() {
-    return this._section.scroll;
-  },
-  didLayout: function() {
-    return this._didLayout.listenable;
-  }
-});
-
 type.defineMethods({
   _onLayout: function(layout) {
-    var scroll;
-    scroll = this.scroll;
-    this._offset = layout[scroll.axis];
-    this._length = layout[scroll.isHorizontal ? "width" : "height"];
-    return this._didLayout.emit();
+    var childBelow, newLength, oldLength;
+    newLength = layout[this.scroll.isHorizontal ? "width" : "height"];
+    if (newLength === (oldLength = this._length)) {
+      return;
+    }
+    this._length = newLength;
+    if (this.index === 0) {
+      this._offset = 0;
+    } else if (this._offset !== null) {
+      if (childBelow = this._section.get(this.index + 1)) {
+        childBelow._offset = this._offset + newLength;
+      }
+    }
+    this._section._length += newLength - oldLength;
+    this._didLayout.emit();
   }
 });
 

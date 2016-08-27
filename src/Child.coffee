@@ -15,11 +15,33 @@ type.defineReactiveValues
 
   _index: null
 
-  _offset: null
-
-  _length: null
-
   _isVisible: null
+
+type.defineProperties
+
+  _offset:
+    value: null
+    reactive: yes
+    didSet: (newOffset, oldOffset) ->
+      return if newOffset is oldOffset
+      log.it @__name + ".offset = " + newOffset
+      @__onOffsetChange newOffset, oldOffset
+
+  _length:
+    value: 0
+    reactive: yes
+    didSet: (newLength, oldLength) ->
+      return if newLength is oldLength
+      log.it @__name + ".length = " + newLength
+      @__onLengthChange newLength, oldLength
+
+  _section:
+    value: null
+    didSet: (newSection, oldSection) ->
+      return if newSection is oldSection
+      oldSection and @__onRemove()
+      newSection and @__onInsert()
+      return
 
 type.defineGetters
 
@@ -33,29 +55,28 @@ type.defineGetters
 
   section: -> @_section
 
+  scroll: -> @_section.scroll
+
   didLayout: -> @_didLayout.listenable
 
-type.defineMethods
+type.defineHooks
 
-  _setSection: (newValue) ->
-    oldValue = @_section
-
-    if newValue and oldValue
-      throw Error "Must set section to null first!"
-
-    if @_section = newValue
-      @__onInsert()
-    else if oldValue
-      @__onRemove()
+  # By default, this implements cascading
+  # '__onOffsetChange' calls to all mounted
+  # children that come after this child.
+  __onOffsetChange: (newOffset) ->
+    return if @_length is null
+    if childBelow = @_section.get @index + 1
+      childBelow._offset = newOffset + @_length
     return
 
-type.defineHooks
+  __onLengthChange: emptyFunction
 
   __onInsert: emptyFunction
 
   __onRemove: emptyFunction
 
-  # TODO: Allow a Promise to be returned for asynchronous updates before the section is removed.
+  # TODO: Allow a Promise to be returned for asynchronous updates before the child is removed.
   # __willRemove: emptyFunction
 
 module.exports = type.build()

@@ -1,4 +1,4 @@
-var ArrayOf, Children, Device, Draggable, NativeValue, Null, Number, NumberOrNull, Rubberband, Section, Style, Type, View, assertType, clampValue, emptyFunction, isType, ref, type;
+var Children, Device, Draggable, NativeValue, Null, Number, NumberOrNull, Rubberband, Section, Style, Type, View, assertType, bind, clampValue, emptyFunction, isType, ref, type;
 
 ref = require("modx"), Type = ref.Type, Device = ref.Device, Style = ref.Style, Children = ref.Children;
 
@@ -18,11 +18,11 @@ clampValue = require("clampValue");
 
 Draggable = require("Draggable");
 
-ArrayOf = require("ArrayOf");
-
 isType = require("isType");
 
 Null = require("Null");
+
+bind = require("bind");
 
 Section = require("./Section");
 
@@ -34,10 +34,16 @@ type.defineOptions({
   axis: Draggable.Axis.isRequired,
   offset: Number,
   endThreshold: Number.withDefault(0),
-  visibleThreshold: Number.withDefault(0),
+  fastThreshold: Number.withDefault(0.2),
   stretchLimit: Number,
   elasticity: Number.withDefault(0.7),
   children: Section.Kind
+});
+
+type.initArgs(function(arg) {
+  var options;
+  options = arg[0];
+  return options.stretchLimit != null ? options.stretchLimit : options.stretchLimit = options.axis === "x" ? Device.width : Device.height;
 });
 
 type.defineStatics({
@@ -67,10 +73,11 @@ type.defineReactiveValues({
 
 type.defineValues(function(options) {
   return {
-    visibleThreshold: options.visibleThreshold,
     _children: null,
-    _edgeOffset: null,
-    _maxOffset: null
+    _endOffset: null,
+    _edgeIndex: null,
+    _edgeOffsets: [],
+    _fastThreshold: options.fastThreshold
   };
 });
 
@@ -85,10 +92,15 @@ type.defineFrozenValues(function(options) {
           return _this.__canDrag(gesture);
         };
       })(this),
-      shouldCaptureOnStart: this._shouldCaptureOnStart
+      shouldCaptureOnStart: (function(_this) {
+        return function(gesture) {
+          return _this.__shouldCaptureOnStart(gesture);
+        };
+      })(this)
     }),
     _edge: Rubberband({
-      maxValue: options.stretchLimit != null ? options.stretchLimit : options.stretchLimit = this._getDefaultStretchLimit(options.axis),
+      maxValue: options.stretchLimit,
+      maxVelocity: 3,
       elasticity: options.elasticity
     })
   };
@@ -99,13 +111,10 @@ type.initInstance(function(options) {
 });
 
 type.defineEvents({
-  didLayout: {
-    newValue: NumberOrNull,
-    oldValue: NumberOrNull
-  },
   didScroll: {
     offset: Number
   },
+  didLayout: null,
   didReachEnd: null
 });
 
@@ -122,20 +131,20 @@ type.defineGetters({
   isDragging: function() {
     return this._drag.isActive;
   },
-  minOffset: function() {
-    return 0;
-  },
-  maxOffset: function() {
-    return this._maxOffset;
-  },
   contentLength: function() {
     return this._contentLength;
   },
   visibleLength: function() {
     return this._visibleLength;
   },
+  edgeOffset: function() {
+    if (this._edgeIndex === null) {
+      return null;
+    }
+    return this._edgeOffsets[this._edgeIndex] || 0;
+  },
   inBounds: function() {
-    return this._edge.delta === 0;
+    return this._edgeIndex === null;
   },
   isRebounding: function() {
     return this._edge.isRebounding;
@@ -165,23 +174,24 @@ type.definePrototype({
     get: function() {
       return this._children;
     },
-    set: function(newValue) {
-      var oldValue;
-      if (oldValue = this._children) {
-        if (oldValue === newValue) {
-          return;
-        }
-        oldValue._isVisible = null;
+    set: function(newValue, oldValue) {
+      if (newValue === oldValue) {
+        return;
+      }
+      if (oldValue !== null) {
         oldValue._index = null;
         oldValue._scroll = null;
+        oldValue._isVisible = null;
       }
-      if (newValue) {
-        assertType(newValue, Section.Kind);
-        newValue._isVisible = true;
-        newValue._index = 0;
-        newValue._scroll = this;
-        return this._children = newValue;
+      if (newValue === null) {
+        this._children = null;
+        return;
       }
+      assertType(newValue, Section.Kind);
+      newValue._index = 0;
+      newValue._scroll = this;
+      newValue._isVisible = true;
+      this._children = newValue;
     }
   },
   offset: {
@@ -190,6 +200,22 @@ type.definePrototype({
     },
     set: function(offset) {
       return this._drag.offset.value = 0 - offset;
+    }
+  },
+  minOffset: {
+    get: function() {
+      return this._edgeOffsets[0] || 0;
+    },
+    set: function(minOffset) {
+      return this._edgeOffsets[0] = minOffset;
+    }
+  },
+  maxOffset: {
+    get: function() {
+      return this._edgeOffsets[1] || 0;
+    },
+    set: function(maxOffset) {
+      return this._edgeOffsets[1] = maxOffset;
     }
   },
   isTouchable: {
@@ -213,42 +239,38 @@ type.defineMethods({
     this._drag.offset.stopAnimation();
     this._edge.isRebounding && this._edge.stopRebounding();
   },
+  _animationFlags: function() {
+    return {
+      isAnimating: this._drag.offset.isAnimating,
+      isRebounding: this._edge.isRebounding
+    };
+  },
   _setContentLength: function(newLength) {
-    var oldLength;
-    oldLength = this._contentLength;
-    if (newLength === oldLength) {
+    if (newLength === this._contentLength) {
       return;
     }
-    this._contentLength = newLength;
-    return this._updateMaxOffset();
+    return this._updateEndOffset((this._contentLength = newLength), this._visibleLength);
   },
   _setVisibleLength: function(newLength) {
-    var oldLength;
-    oldLength = this._visibleLength;
-    if (newLength === oldLength) {
+    if (newLength === this._visibleLength) {
       return;
     }
-    this._visibleLength = newLength;
-    return this._updateMaxOffset();
+    return this._updateEndOffset(this._contentLength, (this._visibleLength = newLength));
   },
-  _updateMaxOffset: function() {
+  _updateEndOffset: function(contentLength, visibleLength) {
     var newValue, oldValue;
-    newValue = null;
-    if ((this.contentLength != null) && (this.visibleLength != null)) {
-      newValue = Math.max(0, this.contentLength - this.visibleLength);
-    }
-    oldValue = this._maxOffset;
-    if (newValue === oldValue) {
+    newValue = this.__computeEndOffset(contentLength, visibleLength);
+    assertType(newValue, NumberOrNull);
+    if (newValue === (oldValue = this._endOffset)) {
       return;
     }
-    this._maxOffset = newValue;
-    this._reachedEnd = false;
-    this._updateReachedEnd(this._offset.value, newValue);
-    return this._events.emit("didLayout", [newValue, oldValue]);
+    this._endOffset = newValue;
+    log.it(this.__name + ".didLayout()");
+    this._events.emit("didLayout");
   },
-  _updateReachedEnd: function(offset, maxOffset) {
+  _updateReachedEnd: function(offset, endOffset) {
     var newValue;
-    newValue = this.__isEndReached(offset, maxOffset);
+    newValue = this.__isEndReached(offset, endOffset);
     if (this._reachedEnd === newValue) {
       return;
     }
@@ -256,102 +278,117 @@ type.defineMethods({
       this._events.emit("didReachEnd");
     }
   },
-  _shouldRebound: function(gesture) {
-    if (this.inBounds) {
-      return false;
-    }
-    return this.__shouldRebound(gesture);
-  },
-  _rebound: function(arg) {
-    var maxOffset, velocity;
-    velocity = arg.velocity;
-    maxOffset = this._maxOffset || 0;
-    if (this.offset > maxOffset) {
+  _rebound: function(velocity) {
+    this.stopScrolling();
+    if (this._edgeIndex === 0) {
       velocity *= -1;
     }
-    return this._edge.rebound(velocity);
-  },
-  _getDefaultStretchLimit: function(axis) {
-    if (axis === "x") {
-      return Device.width;
+    if (velocity > 0) {
+      velocity *= 300;
     }
-    return Device.height;
+    log.it(this.__name + ("._rebound: {offset: " + this.offset + ", velocity: " + velocity + "}"));
+    return this._edge.rebound({
+      velocity: velocity,
+      onEnd: this._onReboundEnd
+    });
+  },
+  _isScrollingFast: function() {
+    if (!this.__isScrolling()) {
+      return false;
+    }
+    return this._fastThreshold < Math.abs(this.__getVelocity());
+  },
+  _getStartOffset: function() {
+    var offset;
+    offset = 0 - this._drag.offset.value;
+    if (this._edgeIndex !== null) {
+      if (this._edgeIndex === 0) {
+        return this.edgeOffset - this._edge.resist();
+      }
+      return this.edgeOffset + this._edge.resist();
+    }
+    return clampValue(offset, this.minOffset, this.maxOffset);
   }
 });
 
 type.defineBoundMethods({
-  _shouldCaptureOnStart: function(gesture) {
-    var velocity;
-    if (this._edge.isRebounding) {
-      log.it("edge.delta = " + this._edge.delta);
-      return this._edge.delta > 10;
-    }
-    if (this.__isScrolling(gesture)) {
-      velocity = this._drag.offset.animation.velocity;
-      return Math.abs(velocity) > 0.02;
-    }
-    return this.__shouldCaptureOnStart(gesture);
+  _onDragStart: function(gesture) {
+    this.stopScrolling();
+    gesture._startOffset = 0 - this._getStartOffset();
+    this.__onDragStart(gesture);
   },
   _onScroll: function(offset) {
-    var maxOffset;
-    maxOffset = this._maxOffset || 0;
     if (this.inBounds) {
-      this._updateReachedEnd(offset, maxOffset);
+      this._updateReachedEnd(offset, this._endOffset);
       this._children && this._children.updateVisibleRange();
     }
-    this.__onScroll(offset, maxOffset);
+    this.__onScroll(offset);
     return this._events.emit("didScroll", [offset]);
   },
-  _onDragStart: function(gesture) {
-    var delta, offset;
-    this.stopScrolling();
-    offset = 0 - this._drag.offset.value;
-    delta = this._edge.delta;
-    if (delta > 0) {
-      if (offset < this.minOffset) {
-        delta *= -1;
-      }
-      offset = this._edgeOffset + delta;
-    } else {
-      offset = clampValue(offset, this.minOffset, this._maxOffset || 0);
-    }
-    offset *= -1;
-    this._drag.offset._value = gesture._startOffset = offset;
-    this.__onDragStart(gesture);
+  _onReboundEnd: function(finished) {
+    finished && (this._edgeIndex = null);
+    return this.__onReboundEnd(finished);
   }
 });
 
 type.defineHooks({
   __shouldUpdate: emptyFunction.thatReturnsFalse,
-  __shouldCaptureOnStart: emptyFunction.thatReturnsFalse,
+  __shouldCaptureOnStart: function() {
+    if (this._edge.isRebounding) {
+      return this._edge.delta > 10;
+    }
+    return this._isScrollingFast();
+  },
   __canDrag: emptyFunction.thatReturnsTrue,
   __canScroll: function() {
-    return this._maxOffset !== null;
+    return this._endOffset !== null;
   },
   __isScrolling: function() {
     return this._drag.offset.isAnimating;
   },
-  __isEndReached: function(offset, maxOffset) {
-    return (maxOffset !== null) && (maxOffset !== 0) && (maxOffset - this._endThreshold <= offset);
+  __getVelocity: function() {
+    var animation;
+    animation = this._drag.offset.animation;
+    if (animation) {
+      return 0;
+    } else {
+      return animation.velocity;
+    }
+  },
+  __isEndReached: function(offset, endOffset) {
+    return (endOffset !== null) && (endOffset !== 0) && (endOffset - this._endThreshold <= offset);
   },
   __onDragStart: emptyFunction,
   __onDragEnd: function(gesture) {
-    if (this._shouldRebound(gesture)) {
-      return this._rebound(gesture);
+    var velocity;
+    if (this.inBounds) {
+      return;
     }
+    velocity = gesture.velocity;
+    if (this._edgeIndex === 0) {
+      velocity *= -1;
+    }
+    return this._rebound(velocity);
   },
-  __shouldRebound: emptyFunction.thatReturnsTrue,
   __onScroll: emptyFunction,
+  __onReboundEnd: emptyFunction,
   __computeOffset: function(offset, minOffset, maxOffset) {
-    var delta;
-    if (this._edgeOffset === null) {
+    if (this._edgeIndex === null) {
       return clampValue(offset, minOffset, maxOffset);
     }
-    delta = this._edge.resist();
-    if (offset < minOffset) {
-      delta *= -1;
+    if (this._edgeIndex === 0) {
+      return this.edgeOffset - this._edge.resist();
     }
-    return this._edgeOffset + delta;
+    return this.edgeOffset + this._edge.resist();
+  },
+  __computeEndOffset: function(contentLength, visibleLength) {
+    if (contentLength === null) {
+      return null;
+    }
+    if (visibleLength === null) {
+      return null;
+    }
+    return Math.max(0, contentLength - visibleLength);
   }
 });
 
@@ -360,41 +397,28 @@ type.defineProps({
   children: Children
 });
 
-type.defineReactions(function() {
-  return {
-    _edgeDelta: {
-      get: (function(_this) {
-        return function() {
-          var maxOffset, minOffset, offset;
-          offset = 0 - _this._drag.offset.value;
-          if (offset < (minOffset = _this.minOffset)) {
-            _this._edgeOffset = minOffset;
-            return minOffset - offset;
-          }
-          if (offset > (maxOffset = _this._maxOffset || 0)) {
-            _this._edgeOffset = maxOffset;
-            return offset - maxOffset;
-          }
-          _this._edgeOffset = null;
-          return 0;
-        };
-      })(this),
-      didSet: (function(_this) {
-        return function(delta) {
-          return _this._edge.delta = delta;
-        };
-      })(this)
+type.defineReactions({
+  _edgeDelta: function() {
+    var maxOffset, minOffset, offset;
+    offset = 0 - this._drag.offset.value;
+    if (offset < (minOffset = this.minOffset)) {
+      this._edgeIndex = 0;
+      this._edge.delta = minOffset - offset;
+    } else if (offset > (maxOffset = this.maxOffset)) {
+      this._edgeIndex = 1;
+      this._edge.delta = offset - maxOffset;
+    } else {
+      this._edgeIndex = null;
+      this._edge.delta = 0;
     }
-  };
+  }
 });
 
 type.defineNativeValues({
   _offset: function() {
-    var maxOffset, minOffset, offset;
+    var offset;
     offset = 0 - this._drag.offset.value;
-    minOffset = this.minOffset;
-    maxOffset = this._maxOffset || 0;
-    offset = this.__computeOffset(offset, minOffset, maxOffset);
+    offset = this.__computeOffset(offset, this.minOffset, this.maxOffset);
     assertType(offset, Number);
     return Device.round(0 - offset);
   },
@@ -409,14 +433,23 @@ type.defineNativeValues({
 type.defineListeners(function() {
   this._offset.didSet(this._onScroll);
   this._drag.didGrant(this._onDragStart);
-  return this._drag.didEnd((function(_this) {
+  this._drag.didEnd((function(_this) {
     return function(gesture) {
       return _this.__onDragEnd(gesture);
+    };
+  })(this));
+  return this.didLayout((function(_this) {
+    return function() {
+      _this._reachedEnd = false;
+      return _this._updateReachedEnd(_this._offset.value, _this._endOffset);
     };
   })(this));
 });
 
 type.defineStyles({
+  container: {
+    overflow: "hidden"
+  },
   contents: {
     alignItems: "stretch",
     justifyContent: "flex-start",
@@ -442,11 +475,7 @@ type.defineStyles({
 
 type.render(function() {
   return View({
-    style: [
-      this.props.style, {
-        overflow: "hidden"
-      }
-    ],
+    style: [this.props.style, this.styles.container()],
     children: this.__renderContents(),
     pointerEvents: this._pointerEvents,
     mixins: [this._drag.touchHandlers],
