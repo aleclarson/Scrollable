@@ -174,24 +174,25 @@ type.definePrototype({
     get: function() {
       return this._children;
     },
-    set: function(newValue, oldValue) {
-      if (newValue === oldValue) {
+    set: function(section, oldSection) {
+      if (section === oldSection) {
         return;
       }
-      if (oldValue !== null) {
-        oldValue._index = null;
-        oldValue._scroll = null;
-        oldValue._isVisible = null;
+      if (oldSection) {
+        oldSection._index = null;
+        oldSection._scroll = null;
+        oldSection._isVisible = null;
       }
-      if (newValue === null) {
+      if (section === null) {
         this._children = null;
         return;
       }
-      assertType(newValue, Section.Kind);
-      newValue._index = 0;
-      newValue._scroll = this;
-      newValue._isVisible = true;
-      this._children = newValue;
+      assertType(section, Section.Kind);
+      this._children = section;
+      section._index = 0;
+      section._scroll = this;
+      section._isVisible = true;
+      section._mountWillBegin();
     }
   },
   offset: {
@@ -239,34 +240,40 @@ type.defineMethods({
     this._drag.offset.stopAnimation();
     this._edge.isRebounding && this._edge.stopRebounding();
   },
-  _animationFlags: function() {
-    return {
-      isAnimating: this._drag.offset.isAnimating,
-      isRebounding: this._edge.isRebounding
-    };
+  _onLayout: function() {
+    this._reachedEnd = false;
+    this._updateReachedEnd(this._offset.value, this._endOffset);
+    this._events.emit("didLayout");
   },
   _setContentLength: function(newLength) {
     if (newLength === this._contentLength) {
       return;
     }
-    return this._updateEndOffset((this._contentLength = newLength), this._visibleLength);
+    this._contentLength = newLength;
+    this._updateEndOffset(newLength, this._visibleLength);
+    this._onLayout();
   },
   _setVisibleLength: function(newLength) {
     if (newLength === this._visibleLength) {
       return;
     }
-    return this._updateEndOffset(this._contentLength, (this._visibleLength = newLength));
+    this._visibleLength = newLength;
+    if (this._updateEndOffset(this._contentLength, newLength)) {
+      this._onLayout();
+    }
   },
   _updateEndOffset: function(contentLength, visibleLength) {
-    var newValue, oldValue;
-    newValue = this.__computeEndOffset(contentLength, visibleLength);
-    assertType(newValue, NumberOrNull);
-    if (newValue === (oldValue = this._endOffset)) {
-      return;
+    var endOffset;
+    endOffset = null;
+    if ((contentLength !== null) && (visibleLength !== null)) {
+      endOffset = this.__computeEndOffset(contentLength, visibleLength);
+      assertType(endOffset, NumberOrNull, "endOffset");
     }
-    this._endOffset = newValue;
-    log.it(this.__name + ".didLayout()");
-    this._events.emit("didLayout");
+    if (endOffset !== this._endOffset) {
+      this._endOffset = endOffset;
+      return true;
+    }
+    return false;
   },
   _updateReachedEnd: function(offset, endOffset) {
     var newValue;
@@ -298,7 +305,7 @@ type.defineMethods({
     }
     return this._fastThreshold < Math.abs(this.__getVelocity());
   },
-  _getStartOffset: function() {
+  _computeRawOffset: function() {
     var offset;
     offset = 0 - this._drag.offset.value;
     if (this._edgeIndex !== null) {
@@ -308,13 +315,19 @@ type.defineMethods({
       return this.edgeOffset + this._edge.resist();
     }
     return clampValue(offset, this.minOffset, this.maxOffset);
+  },
+  _updateEdgeOffsets: function() {
+    this._edgeOffsets = [this.__computeMinOffset(), this.__computeMaxOffset()];
+  },
+  _childDidLayout: function(child, lengthChange) {
+    return log.it(this.__name + ("._childDidLayout(" + child.__name + ", " + lengthChange + ")"));
   }
 });
 
 type.defineBoundMethods({
   _onDragStart: function(gesture) {
     this.stopScrolling();
-    gesture._startOffset = 0 - this._getStartOffset();
+    gesture._startOffset = 0 - this._computeRawOffset();
     this.__onDragStart(gesture);
   },
   _onScroll: function(offset) {
@@ -389,6 +402,18 @@ type.defineHooks({
       return null;
     }
     return Math.max(0, contentLength - visibleLength);
+  },
+  __computeMinOffset: function() {
+    return 0;
+  },
+  __computeMaxOffset: function() {
+    if (this._endOffset === null) {
+      return 0;
+    }
+    if (this.visibleLength === null) {
+      return 0;
+    }
+    return this._endOffset - this.visibleLength;
   }
 });
 
@@ -433,15 +458,9 @@ type.defineNativeValues({
 type.defineListeners(function() {
   this._offset.didSet(this._onScroll);
   this._drag.didGrant(this._onDragStart);
-  this._drag.didEnd((function(_this) {
+  return this._drag.didEnd((function(_this) {
     return function(gesture) {
       return _this.__onDragEnd(gesture);
-    };
-  })(this));
-  return this.didLayout((function(_this) {
-    return function() {
-      _this._reachedEnd = false;
-      return _this._updateReachedEnd(_this._offset.value, _this._endOffset);
     };
   })(this));
 });

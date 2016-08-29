@@ -26,7 +26,8 @@ type.defineValues(function(options) {
     _key: options.key,
     _props: options.props,
     _render: options.render,
-    _element: options.element
+    _element: options.element,
+    _root: null
   };
 });
 
@@ -44,41 +45,59 @@ type.defineValues({
   }
 });
 
-type.defineMethods({
-  _onLayout: function(layout) {
-    var childBelow, newLength, oldLength;
+type.defineBoundMethods({
+  _rootDidRef: function(view) {
+    return this._root = view ? view.child : null;
+  },
+  _rootDidLayout: function(event) {
+    var layout, newLength, oldLength;
+    layout = event.nativeEvent.layout;
     newLength = layout[this.scroll.isHorizontal ? "width" : "height"];
     if (newLength === (oldLength = this._length)) {
       return;
     }
-    this._length = newLength;
-    if (this.index === 0) {
-      this._offset = 0;
-    } else if (this._offset !== null) {
-      if (childBelow = this._section.get(this.index + 1)) {
-        childBelow._offset = this._offset + newLength;
-      }
-    }
-    this._section._length += newLength - oldLength;
+    this._setLength(newLength);
+    this._section._childDidLayout(this, newLength - oldLength);
     this._didLayout.emit();
+  }
+});
+
+type.defineMethods({
+  attachRoot: function() {
+    return this._root.setNativeProps({
+      style: {
+        position: "relative",
+        opacity: 1
+      }
+    });
+  },
+  detachRoot: function() {
+    return this._root.setNativeProps({
+      style: {
+        position: "absolute",
+        opacity: 0
+      }
+    });
+  }
+});
+
+type.overrideMethods({
+  __lengthDidChange: function(length) {
+    if (length !== null) {
+      this.isFirst && (this._offset = 0);
+    }
+    return this.__super(arguments);
   }
 });
 
 type.render(function() {
   return View({
     key: this._key,
+    ref: this._rootDidRef,
     style: this.styles.container(),
     children: this.__renderContents(),
-    onLayout: (function(_this) {
-      return function(event) {
-        return _this._onLayout(event.nativeEvent.layout);
-      };
-    })(this)
+    onLayout: this._rootDidLayout
   });
-});
-
-type.willUpdate(function() {
-  return log.it(this.__name + ".willUpdate()");
 });
 
 type.willMount(function() {
@@ -95,7 +114,9 @@ type.defineHooks({
 
 type.defineStyles({
   container: {
-    overflow: "hidden"
+    position: "absolute",
+    overflow: "hidden",
+    opacity: 0
   }
 });
 

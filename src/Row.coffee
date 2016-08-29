@@ -27,38 +27,50 @@ type.defineValues (options) ->
 
   _element: options.element
 
+  _root: null
+
 type.defineValues
 
   __renderContents: ->
     if @_element then -> @_element
     else if @_render then -> @_render @_props
 
-type.defineMethods
+type.defineBoundMethods
 
-  _onLayout: (layout) ->
+  _rootDidRef: (view) ->
+    @_root = if view then view.child else null
+
+  _rootDidLayout: (event) ->
+    {layout} = event.nativeEvent
+
     newLength = layout[if @scroll.isHorizontal then "width" else "height"]
     return if newLength is oldLength = @_length
-    @_length = newLength # NOTE: If a new '_length' exists, it must always be set before '_offset'!
 
-    # NOTE: Since '_offset' is relative to '_section.offset',
-    #       we can assume zero for the first row.
-    if @index is 0
-      @_offset = 0
+    @_setLength newLength
+    @_section._childDidLayout this, newLength - oldLength
 
-    else if @_offset isnt null
-      if childBelow = @_section.get @index + 1
-        childBelow._offset = @_offset + newLength
-
-    # NOTE: Since setting '_section._length' triggers cascading
-    #       'didLayout' events, we must set it *after* updating
-    #       the '_offset' and '_length' of this row.
-    @_section._length += newLength - oldLength
-
-    # TODO: Update row visibility?
-    # @_isVisible = scroll._isAreaVisible @_offset, newLength
-
+    # @_isVisible = @scroll._isAreaVisible @_offset, newLength
     @_didLayout.emit()
     return
+
+type.defineMethods
+
+  attachRoot: ->
+    @_root.setNativeProps
+      style: {position: "relative", opacity: 1}
+
+  detachRoot: ->
+    @_root.setNativeProps
+      style: {position: "absolute", opacity: 0}
+
+type.overrideMethods
+
+  __lengthDidChange: (length) ->
+
+    if length isnt null
+      @isFirst and @_offset = 0
+
+    @__super arguments
 
 #
 # Rendering
@@ -67,13 +79,10 @@ type.defineMethods
 type.render ->
   return View
     key: @_key
+    ref: @_rootDidRef
     style: @styles.container()
     children: @__renderContents()
-    onLayout: (event) =>
-      @_onLayout event.nativeEvent.layout
-
-type.willUpdate ->
-  log.it @__name + ".willUpdate()"
+    onLayout: @_rootDidLayout
 
 type.willMount ->
   @props.row = this
@@ -88,6 +97,8 @@ type.defineHooks
 type.defineStyles
 
   container:
+    position: "absolute"
     overflow: "hidden"
+    opacity: 0
 
 module.exports = type.build()

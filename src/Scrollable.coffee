@@ -101,7 +101,7 @@ type.defineEvents
   didScroll:
     offset: Number
 
-  # Emits when 'endOffset' is changed.
+  # Emits when 'contentLength' or 'endOffset' is changed.
   didLayout: null
 
   # Emits when 'offset' gets close enough to 'endOffset'.
@@ -145,23 +145,25 @@ type.definePrototype
 
   children:
     get: -> @_children
-    set: (newValue, oldValue) ->
-      return if newValue is oldValue
+    set: (section, oldSection) ->
+      return if section is oldSection
 
-      if oldValue isnt null
-        oldValue._index = null
-        oldValue._scroll = null
-        oldValue._isVisible = null
+      if oldSection
+        oldSection._index = null
+        oldSection._scroll = null
+        oldSection._isVisible = null
 
-      if newValue is null
+      if section is null
         @_children = null
         return
 
-      assertType newValue, Section.Kind
-      newValue._index = 0
-      newValue._scroll = this
-      newValue._isVisible = yes
-      @_children = newValue
+      assertType section, Section.Kind
+      @_children = section
+
+      section._index = 0
+      section._scroll = this
+      section._isVisible = yes
+      section._mountWillBegin()
       return
 
   offset:
@@ -197,26 +199,34 @@ type.defineMethods
     @_edge.isRebounding and @_edge.stopRebounding()
     return
 
-  _animationFlags: ->
-    isAnimating: @_drag.offset.isAnimating
-    isRebounding: @_edge.isRebounding
+  _onLayout: ->
+    @_reachedEnd = no
+    @_updateReachedEnd @_offset.value, @_endOffset
+    @_events.emit "didLayout"
+    return
 
   _setContentLength: (newLength) ->
     return if newLength is @_contentLength
-    @_updateEndOffset (@_contentLength = newLength), @_visibleLength
+    @_contentLength = newLength
+    @_updateEndOffset newLength, @_visibleLength
+    @_onLayout()
+    return
 
   _setVisibleLength: (newLength) ->
     return if newLength is @_visibleLength
-    @_updateEndOffset @_contentLength, (@_visibleLength = newLength)
+    @_visibleLength = newLength
+    @_onLayout() if @_updateEndOffset @_contentLength, newLength
+    return
 
   _updateEndOffset: (contentLength, visibleLength) ->
-    newValue = @__computeEndOffset contentLength, visibleLength
-    assertType newValue, NumberOrNull
-    return if newValue is (oldValue = @_endOffset)
-    @_endOffset = newValue
-    log.it @__name + ".didLayout()"
-    @_events.emit "didLayout"
-    return
+    endOffset = null
+    if (contentLength isnt null) and (visibleLength isnt null)
+      endOffset = @__computeEndOffset contentLength, visibleLength
+      assertType endOffset, NumberOrNull, "endOffset"
+    if endOffset isnt @_endOffset
+      @_endOffset = endOffset
+      return yes
+    return no
 
   _updateReachedEnd: (offset, endOffset) ->
     newValue = @__isEndReached offset, endOffset
@@ -244,9 +254,9 @@ type.defineMethods
     return no if not @__isScrolling()
     return @_fastThreshold < Math.abs @__getVelocity()
 
-  # Since '_drag.offset' isnt updated when '_edge.delta' animates,
-  # we need to update '_drag.offset' to match the newest value.
-  _getStartOffset: ->
+  # Find the necessary value of '_drag.offset' that equals
+  # the current 'offset' after '_edge.resist()' is applied.
+  _computeRawOffset: ->
     offset = 0 - @_drag.offset.value
     if @_edgeIndex isnt null
       if @_edgeIndex is 0
@@ -254,11 +264,21 @@ type.defineMethods
       return @edgeOffset + @_edge.resist()
     return clampValue offset, @minOffset, @maxOffset
 
+  _updateEdgeOffsets: ->
+    @_edgeOffsets = [
+      @__computeMinOffset()
+      @__computeMaxOffset()
+    ]
+    return
+
+  _childDidLayout: (child, lengthChange) ->
+    log.it @__name + "._childDidLayout(#{child.__name}, #{lengthChange})"
+
 type.defineBoundMethods
 
   _onDragStart: (gesture) ->
     @stopScrolling()
-    gesture._startOffset = 0 - @_getStartOffset()
+    gesture._startOffset = 0 - @_computeRawOffset()
     @__onDragStart gesture
     return
 
@@ -329,6 +349,14 @@ type.defineHooks
     return null if visibleLength is null
     return Math.max 0, contentLength - visibleLength
 
+  __computeMinOffset: ->
+    return 0
+
+  __computeMaxOffset: ->
+    return 0 if @_endOffset is null
+    return 0 if @visibleLength is null
+    return @_endOffset - @visibleLength
+
 #
 # View-related
 #
@@ -372,10 +400,6 @@ type.defineListeners ->
 
   @_drag.didEnd (gesture) =>
     @__onDragEnd gesture
-
-  @didLayout =>
-    @_reachedEnd = no
-    @_updateReachedEnd @_offset.value, @_endOffset
 
 type.defineStyles
 
