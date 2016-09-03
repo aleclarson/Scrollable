@@ -26,8 +26,7 @@ type.defineValues(function(options) {
     _key: options.key,
     _props: options.props,
     _render: options.render,
-    _element: options.element,
-    _root: null
+    _element: options.element
   };
 });
 
@@ -46,9 +45,6 @@ type.defineValues({
 });
 
 type.defineBoundMethods({
-  _rootDidRef: function(view) {
-    return this._root = view ? view.child : null;
-  },
   _rootDidLayout: function(event) {
     var layout, newLength, oldLength;
     layout = event.nativeEvent.layout;
@@ -57,36 +53,8 @@ type.defineBoundMethods({
       return;
     }
     this._setLength(newLength);
-    this._section._childDidLayout(this, newLength - oldLength);
+    this._section.__childDidLayout(this, newLength - oldLength);
     this._didLayout.emit();
-  }
-});
-
-type.defineMethods({
-  attachRoot: function() {
-    return this._root.setNativeProps({
-      style: {
-        position: "relative",
-        opacity: 1
-      }
-    });
-  },
-  detachRoot: function() {
-    return this._root.setNativeProps({
-      style: {
-        position: "absolute",
-        opacity: 0
-      }
-    });
-  }
-});
-
-type.overrideMethods({
-  __lengthDidChange: function(length) {
-    if (length !== null) {
-      this.isFirst && (this._offset = 0);
-    }
-    return this.__super(arguments);
   }
 });
 
@@ -94,7 +62,7 @@ type.render(function() {
   return View({
     key: this._key,
     ref: this._rootDidRef,
-    style: this.styles.container(),
+    style: [this.styles.container(), this._rootStyle],
     children: this.__renderContents(),
     onLayout: this._rootDidLayout
   });

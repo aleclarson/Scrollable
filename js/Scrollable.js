@@ -1,4 +1,4 @@
-var Children, Device, Draggable, NativeValue, Null, Number, NumberOrNull, Rubberband, Section, Style, Type, View, assertType, bind, clampValue, emptyFunction, isType, ref, type;
+var Children, Device, Draggable, NativeValue, Null, Number, RootSection, Rubberband, Style, Type, View, assertType, bind, clampValue, emptyFunction, isType, ref, type;
 
 ref = require("modx"), Type = ref.Type, Device = ref.Device, Style = ref.Style, Children = ref.Children;
 
@@ -24,9 +24,7 @@ Null = require("Null");
 
 bind = require("bind");
 
-Section = require("./Section");
-
-NumberOrNull = Number.or(Null);
+RootSection = require("./RootSection");
 
 type = Type("Scrollable");
 
@@ -36,8 +34,7 @@ type.defineOptions({
   endThreshold: Number.withDefault(0),
   fastThreshold: Number.withDefault(0.2),
   stretchLimit: Number,
-  elasticity: Number.withDefault(0.7),
-  children: Section.Kind
+  elasticity: Number.withDefault(0.7)
 });
 
 type.initArgs(function(arg) {
@@ -47,14 +44,14 @@ type.initArgs(function(arg) {
 });
 
 type.defineStatics({
-  Section: {
-    get: function() {
-      return Section;
-    }
-  },
   Row: {
     lazy: function() {
       return require("./Row");
+    }
+  },
+  Section: {
+    lazy: function() {
+      return require("./Section");
     }
   },
   Child: {
@@ -104,10 +101,6 @@ type.defineFrozenValues(function(options) {
       elasticity: options.elasticity
     })
   };
-});
-
-type.initInstance(function(options) {
-  this.children = options.children || null;
 });
 
 type.defineEvents({
@@ -166,35 +159,13 @@ type.defineGetters({
   },
   didTouchEnd: function() {
     return this._drag.didTouchEnd;
+  },
+  hasChildren: function() {
+    return this._children !== null;
   }
 });
 
 type.definePrototype({
-  children: {
-    get: function() {
-      return this._children;
-    },
-    set: function(section, oldSection) {
-      if (section === oldSection) {
-        return;
-      }
-      if (oldSection) {
-        oldSection._index = null;
-        oldSection._scroll = null;
-        oldSection._isVisible = null;
-      }
-      if (section === null) {
-        this._children = null;
-        return;
-      }
-      assertType(section, Section.Kind);
-      this._children = section;
-      section._index = 0;
-      section._scroll = this;
-      section._isVisible = true;
-      section._mountWillBegin();
-    }
-  },
   offset: {
     get: function() {
       return 0 - this._offset.value;
@@ -230,6 +201,14 @@ type.definePrototype({
 });
 
 type.defineMethods({
+  createChildren: function() {
+    if (this._children) {
+      throw Error("'createChildren' cannot be called more than once!");
+    }
+    return this._children = RootSection({
+      scroll: this
+    });
+  },
   scrollTo: function(offset, config) {
     assertType(offset, Number);
     assertType(config, Object);
@@ -267,7 +246,7 @@ type.defineMethods({
     endOffset = null;
     if ((contentLength !== null) && (visibleLength !== null)) {
       endOffset = this.__computeEndOffset(contentLength, visibleLength);
-      assertType(endOffset, NumberOrNull, "endOffset");
+      assertType(endOffset, Number.or(Null));
     }
     if (endOffset !== this._endOffset) {
       this._endOffset = endOffset;
@@ -306,21 +285,40 @@ type.defineMethods({
     return this._fastThreshold < Math.abs(this.__getVelocity());
   },
   _computeRawOffset: function() {
-    var offset;
-    offset = 0 - this._drag.offset.value;
     if (this._edgeIndex !== null) {
       if (this._edgeIndex === 0) {
         return this.edgeOffset - this._edge.resist();
       }
       return this.edgeOffset + this._edge.resist();
     }
-    return clampValue(offset, this.minOffset, this.maxOffset);
+    return clampValue(0 - this._drag.offset.value, this.minOffset, this.maxOffset);
   },
   _updateEdgeOffsets: function() {
     this._edgeOffsets = [this.__computeMinOffset(), this.__computeMaxOffset()];
   },
-  _childDidLayout: function(child, lengthChange) {
-    return log.it(this.__name + ("._childDidLayout(" + child.__name + ", " + lengthChange + ")"));
+  _isChildVisible: function(child) {
+    var endOffset, offset, section, visibleEnd, visibleStart;
+    section = child.section, offset = child.offset;
+    visibleStart = this.offset;
+    visibleEnd = visibleStart + this.visibleLength;
+    while (section !== null) {
+      if (section.inVisibleArea === false) {
+        return false;
+      }
+      offset += section.startOffset;
+      if (offset > visibleEnd) {
+        return false;
+      }
+      section = section.section;
+    }
+    endOffset = offset + child.length;
+    if (endOffset < visibleStart) {
+      return false;
+    }
+    return {
+      startOffset: Math.max(visibleStart, offset),
+      endOffset: Math.min(visibleEnd, endOffset)
+    };
   }
 });
 
@@ -333,7 +331,6 @@ type.defineBoundMethods({
   _onScroll: function(offset) {
     if (this.inBounds) {
       this._updateReachedEnd(offset, this._endOffset);
-      this._children && this._children.updateVisibleRange();
     }
     this.__onScroll(offset);
     return this._events.emit("didScroll", [offset]);
@@ -413,8 +410,12 @@ type.defineHooks({
     if (this.visibleLength === null) {
       return 0;
     }
-    return this._endOffset - this.visibleLength;
-  }
+    return Math.max(0, this._endOffset - this.visibleLength);
+  },
+  __childWillAttach: emptyFunction.thatReturnsArgument,
+  __childDidAttach: emptyFunction,
+  __childWillDetach: emptyFunction,
+  __childDidLayout: emptyFunction
 });
 
 type.defineProps({
@@ -455,7 +456,7 @@ type.defineNativeValues({
   }
 });
 
-type.defineListeners(function() {
+type.defineMountedListeners(function() {
   this._offset.didSet(this._onScroll);
   this._drag.didGrant(this._onDragStart);
   return this._drag.didEnd((function(_this) {
@@ -510,6 +511,10 @@ type.render(function() {
 });
 
 type.defineHooks({
+  __renderHeader: emptyFunction.thatReturnsFalse,
+  __renderFooter: emptyFunction.thatReturnsFalse,
+  __renderEmpty: emptyFunction.thatReturnsFalse,
+  __renderOverlay: emptyFunction.thatReturnsFalse,
   __renderContents: function() {
     if (this._children) {
       return this._children.render({

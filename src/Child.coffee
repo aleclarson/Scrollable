@@ -1,21 +1,30 @@
 
-require "isDev"
-
 {Type} = require "modx"
 
 emptyFunction = require "emptyFunction"
 Promise = require "Promise"
 Event = require "Event"
 
+revealedStyle = {position: "relative", opacity: 1}
+concealedStyle = {position: "absolute", opacity: 0}
+
 type = Type "Scrollable_Child"
 
-type.defineValues ->
+type.defineValues
+
+  _root: null
+
+  _rootStyle: revealedStyle
 
   _mounting: null
 
-  _didLayout: Event()
+  _mountDeps: null
+
+  _didLayout: -> Event()
 
 type.defineReactiveValues
+
+  _section: null
 
   _index: null
 
@@ -23,21 +32,41 @@ type.defineReactiveValues
 
   _length: null
 
-  _isVisible: null
+  _isRevealed: no
 
-  _section: null
+  _isConcealed: no
+
+  _inVisibleArea: null
+
+type.willMount ->
+  @_mountDeps = @__getMountDeps()
+
+type.didMount ->
+  @_mounting and @_mounting.resolve()
+
+#
+# Prototype-related
+#
 
 type.defineGetters
 
   index: -> @_index
 
-  offset: -> @_offset
+  startOffset: -> @_offset
+
+  endOffset: -> @_offset + @_length
 
   length: -> @_length
 
-  isVisible: -> @_isVisible
+  isMounted: -> @_mounting and @_mounting.promise.isFulfilled
 
-  isMounting: -> @_mounting isnt null
+  isRevealed: -> @_isRevealed
+
+  isConcealed: -> @_isConcealed
+
+  isConcealedByParent: -> @_section and not @_section.isRevealed
+
+  inVisibleArea: -> @_inVisibleArea
 
   isFirst: -> @index is @_section.startIndex
 
@@ -49,7 +78,43 @@ type.defineGetters
 
   didLayout: -> @_didLayout.listenable
 
+type.defineBoundMethods
+
+  _rootDidRef: (view) ->
+    @_root = view
+    return
+
 type.defineMethods
+
+  reveal: ->
+    return if not @_isConcealed
+    @_isConcealed = no
+    @_rootStyle = revealedStyle
+    if @_root and @isMounted
+      @isConcealedByParent or @_reveal()
+    return
+
+  conceal: ->
+    return if @_isConcealed
+    @_isConcealed = yes
+    @_rootStyle = concealedStyle
+    if @_root and @isMounted
+      @_root.setNativeProps {style: concealedStyle}
+      @__onConceal()
+    return
+
+  _reveal: ->
+
+    if isDev
+      if @_isRevealed
+        return console.warn "Already revealed!"
+      if @_offset isnt null
+        return console.warn "'_offset' cannot be set before '__onReveal'!"
+
+    @_isRevealed = yes
+    @_root.setNativeProps {style: revealedStyle}
+    @__onReveal()
+    return
 
   _setSection: (section) ->
     if section isnt oldSection = @_section
@@ -61,6 +126,7 @@ type.defineMethods
 
   _setOffset: (offset) ->
     if offset isnt oldOffset = @_offset
+      log.it @__name + ".offset = " + offset
       @_offset = offset
       @__offsetDidChange offset, oldOffset
     return
@@ -71,31 +137,60 @@ type.defineMethods
       @__lengthDidChange length, oldLength
     return
 
-  _mountWillBegin: ->
-    log.it @__name + "._mountWillBegin()"
-    @_mounting = Promise.defer()
-    @__mountWillBegin()
-    return @_mounting.promise
+  _trackMounting: ->
 
-  _mountDidFinish: ->
-    log.it @__name + "._mountDidFinish()"
-    @_mounting.resolve()
-    @_mounting = null
-    return
+    if @_mounting
+      return @_mounting.promise
 
-  # If both 'offset' and 'length' are non-null,
-  # the offset of the child below is updated.
+    {resolve, promise} = Promise.defer()
+
+    promise = promise
+      .then => @_mountDeps
+      .then => @__onMountFinish()
+
+    @_mounting = {resolve, promise}
+    return promise
+
   _onLayout: (offset, length) ->
-    return if @_section is null
-    return if offset is null
-    return if length is null
-    if childBelow = @_section.get @index + 1
-      childBelow._setOffset offset + length
-    return
+
+    if @_isRevealed and
+       @_section isnt null and
+       offset isnt null and
+       length isnt null
+
+      childBelow = @_section.get @index + 1
+      if childBelow and childBelow.isRevealed
+        childBelow._setOffset offset + length
+      return
 
 type.defineHooks
 
-  __indexDidChange: emptyFunction
+  __getMountDeps: emptyFunction
+
+  __onMountFinish: ->
+    log.it @__name + ".isMounted = true"
+    @_reveal() unless @_isConcealed or @isConcealedByParent
+    return
+
+  __onReveal: ->
+
+    if @_section
+      childAbove = @_section.get @_index - 1
+
+      if childAbove
+        return if childAbove.length is null
+        if childAbove.isRevealed
+          @_setOffset childAbove.endOffset
+          return
+
+    @_setOffset 0
+    return
+
+  __onConceal: ->
+    @_isRevealed = no
+    @_inVisibleArea = null
+    @_setOffset null
+    return
 
   __offsetDidChange: (offset) ->
     @_onLayout offset, @_length
@@ -105,31 +200,16 @@ type.defineHooks
     @_onLayout @_offset, length
     return
 
-  __mountWillBegin: emptyFunction
-
-  __mountWillFinish: emptyFunction
-
   __sectionDidInsert: emptyFunction
 
   # TODO: Support returning a Promise.
   __sectionWillRemove: ->
     @_index = null
+    @_mounting = null
+    @_mountDeps = null
+    @_inVisibleArea = null
     @_setOffset null
     @_setLength null
-    @_isVisible = null
-    @_mounting = null
     return
-
-type.didMount ->
-  if isDev and not @_mounting
-    throw Error "'_mounting' must exist before the 'didMount' phase!"
-
-  mounting = @__mountWillFinish()
-  if Promise.isPending mounting
-    mounting.then => @_mountDidFinish()
-    return
-
-  @_mountDidFinish()
-  return
 
 module.exports = type.build()

@@ -13,9 +13,7 @@ isType = require "isType"
 Null = require "Null"
 bind = require "bind"
 
-Section = require "./Section"
-
-NumberOrNull = Number.or Null
+RootSection = require "./RootSection"
 
 type = Type "Scrollable"
 
@@ -26,7 +24,6 @@ type.defineOptions
   fastThreshold: Number.withDefault 0.2
   stretchLimit: Number
   elasticity: Number.withDefault 0.7
-  children: Section.Kind
 
 type.initArgs ([options]) ->
 
@@ -37,9 +34,9 @@ type.initArgs ([options]) ->
 
 type.defineStatics
 
-  Section: get: -> Section
-
   Row: lazy: -> require "./Row"
+
+  Section: lazy: -> require "./Section"
 
   Child: lazy: -> require "./Child"
 
@@ -87,10 +84,6 @@ type.defineFrozenValues (options) ->
     maxVelocity: 3
     elasticity: options.elasticity
 
-type.initInstance (options) ->
-  @children = options.children or null
-  return
-
 #
 # Prototype-related
 #
@@ -98,8 +91,7 @@ type.initInstance (options) ->
 type.defineEvents
 
   # Emits when 'offset' is changed.
-  didScroll:
-    offset: Number
+  didScroll: {offset: Number}
 
   # Emits when 'contentLength' or 'endOffset' is changed.
   didLayout: null
@@ -141,30 +133,9 @@ type.defineGetters
 
   didTouchEnd: -> @_drag.didTouchEnd
 
+  hasChildren: -> @_children isnt null
+
 type.definePrototype
-
-  children:
-    get: -> @_children
-    set: (section, oldSection) ->
-      return if section is oldSection
-
-      if oldSection
-        oldSection._index = null
-        oldSection._scroll = null
-        oldSection._isVisible = null
-
-      if section is null
-        @_children = null
-        return
-
-      assertType section, Section.Kind
-      @_children = section
-
-      section._index = 0
-      section._scroll = this
-      section._isVisible = yes
-      section._mountWillBegin()
-      return
 
   offset:
     get: -> 0 - @_offset.value
@@ -187,6 +158,13 @@ type.definePrototype
       @_touchable = isTouchable
 
 type.defineMethods
+
+  createChildren: ->
+
+    if @_children
+      throw Error "'createChildren' cannot be called more than once!"
+
+    @_children = RootSection {scroll: this}
 
   scrollTo: (offset, config) ->
     assertType offset, Number
@@ -220,9 +198,11 @@ type.defineMethods
 
   _updateEndOffset: (contentLength, visibleLength) ->
     endOffset = null
+
     if (contentLength isnt null) and (visibleLength isnt null)
       endOffset = @__computeEndOffset contentLength, visibleLength
-      assertType endOffset, NumberOrNull, "endOffset"
+      assertType endOffset, Number.or Null
+
     if endOffset isnt @_endOffset
       @_endOffset = endOffset
       return yes
@@ -257,12 +237,11 @@ type.defineMethods
   # Find the necessary value of '_drag.offset' that equals
   # the current 'offset' after '_edge.resist()' is applied.
   _computeRawOffset: ->
-    offset = 0 - @_drag.offset.value
     if @_edgeIndex isnt null
       if @_edgeIndex is 0
         return @edgeOffset - @_edge.resist()
       return @edgeOffset + @_edge.resist()
-    return clampValue offset, @minOffset, @maxOffset
+    return clampValue 0 - @_drag.offset.value, @minOffset, @maxOffset
 
   _updateEdgeOffsets: ->
     @_edgeOffsets = [
@@ -271,8 +250,23 @@ type.defineMethods
     ]
     return
 
-  _childDidLayout: (child, lengthChange) ->
-    log.it @__name + "._childDidLayout(#{child.__name}, #{lengthChange})"
+  _isChildVisible: (child) ->
+    {section, offset} = child
+
+    visibleStart = @offset
+    visibleEnd = visibleStart + @visibleLength
+    while section isnt null
+      return no if section.inVisibleArea is no
+      offset += section.startOffset
+      return no if offset > visibleEnd
+      section = section.section
+
+    endOffset = offset + child.length
+    return no if endOffset < visibleStart
+    return {
+      startOffset: Math.max visibleStart, offset
+      endOffset: Math.min visibleEnd, endOffset
+    }
 
 type.defineBoundMethods
 
@@ -286,7 +280,7 @@ type.defineBoundMethods
 
     if @inBounds
       @_updateReachedEnd offset, @_endOffset
-      @_children and @_children.updateVisibleRange()
+      # @_children and @_children.updateVisibleRange()
 
     @__onScroll offset
     @_events.emit "didScroll", [offset]
@@ -355,7 +349,15 @@ type.defineHooks
   __computeMaxOffset: ->
     return 0 if @_endOffset is null
     return 0 if @visibleLength is null
-    return @_endOffset - @visibleLength
+    return Math.max 0, @_endOffset - @visibleLength
+
+  __childWillAttach: emptyFunction.thatReturnsArgument
+
+  __childDidAttach: emptyFunction
+
+  __childWillDetach: emptyFunction
+
+  __childDidLayout: emptyFunction
 
 #
 # View-related
@@ -392,7 +394,7 @@ type.defineNativeValues
     return "auto" if @isTouchable
     return "none"
 
-type.defineListeners ->
+type.defineMountedListeners ->
 
   @_offset.didSet @_onScroll
 
@@ -425,6 +427,14 @@ type.render ->
       @_setVisibleLength layout[key]
 
 type.defineHooks
+
+  __renderHeader: emptyFunction.thatReturnsFalse
+
+  __renderFooter: emptyFunction.thatReturnsFalse
+
+  __renderEmpty: emptyFunction.thatReturnsFalse
+
+  __renderOverlay: emptyFunction.thatReturnsFalse
 
   __renderContents: ->
 

@@ -15,8 +15,8 @@
     "Promise": "aleclarson/Promise#1.0.0",
     "Range": "aleclarson/Range#1.0.0",
     "ReactiveList": "aleclarson/ReactiveList#1.1.0",
+    "ReactiveRange": "aleclarson/ReactiveRange#1.0.0",
     "Rubberband": "aleclarson/Rubberband#1.0.0",
-    "Type": "aleclarson/Type#1.1.0",
     "assertType": "aleclarson/assertType#2.0.0",
     "bind": "aleclarson/bind#1.0.0",
     "clampValue": "aleclarson/clampValue#1.0.0",
@@ -24,7 +24,6 @@
     "isDev": "aleclarson/isDev#1.0.0",
     "isType": "aleclarson/isType#1.0.0",
     "modx": "aleclarson/modx#1.0.0",
-    "random": "aleclarson/random#1.0.4",
     "sync": "aleclarson/sync#1.0.0"
   }
 }

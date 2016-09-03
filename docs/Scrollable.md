@@ -111,3 +111,137 @@ content:
 container:
   overflow: "hidden"
 ```
+
+### Subclass Hooks
+
+The following methods are designed with subclassing in mind.
+
+#### `__shouldUpdate: (gesture) -> bool`
+
+Used by the component instance to determine if it should re-render.
+
+By default, always returns `false`. (call `forceUpdate` to re-render)
+
+#### `__shouldCaptureOnStart: (gesture) -> bool`
+
+Used by the drag responder to determine if it should become `Responder.current`.
+
+Called every time a new finger touches the screen.
+
+By default, always returns `false`.
+
+It's rarely necessary to override this, because drag
+gestures are typically created from `shouldCaptureOnMove` events.
+
+#### `__canDrag: () -> bool`
+
+Override to customize the prerequisites
+before drag gestures can be recognized.
+Return false to prevent dragging.
+
+By default, always returns `true`.
+
+#### `__canScroll: () -> bool`
+
+Override to customize the prerequisites
+before scrolling is recognized.
+Return false to prevent scrolling.
+
+By default, returns `true` when `maxOffset` exists.
+
+The only time you should need to override this is
+if you want drag gestures to still be recognized,
+but you want scrolling to be disabled.
+
+#### `__isScrolling: () -> bool`
+
+Override to customize scrolling detection.
+
+By default, only returns `true` if `_drag.offset` is animating.
+
+#### `__isEndReached: (offset, maxOffset) -> bool`
+
+Override to customize "end of content" detection.
+
+By default, uses the `_endThreshold` and `maxOffset`
+to determine if the end has been reached.
+
+#### `__onDragStart: (gesture) -> void`
+
+Called whenever the user starts dragging.
+
+#### `__onDragEnd: (gesture) -> void`
+
+Called whenever the user stops dragging.
+
+#### `__shouldRebound: () -> bool`
+
+Override to customize the logic for rebound prevention.
+
+Return `false` to prevent the rebound animation.
+
+By default, always returns `true`.
+
+#### `__onScroll: (offset, maxOffset) -> void`
+
+Called whenever `offset` changes.
+
+#### `__computeOffset: (offset, minOffset, maxOffset) -> number`
+
+Called whenever `_drag.offset` changes.
+
+Must return a `Number` representing the new `offset`.
+
+**NOTE:** This is called within a [`Reaction`](https://github.com/aleclarson/Reaction)!
+
+#### `__childWillAttach: (child, index) -> Section | Row`
+
+Called before a new child is added.
+
+Must return the given child, or wrap it with a `Section` or `Row` constructor.
+
+**NOTE:** Only available after `createChildren` is called.
+
+#### `__childDidAttach: (child) -> void`
+
+Called after a new child is added.
+
+**NOTE:** Only available after `createChildren` is called.
+
+#### `__childWillDetach: (child) -> void`
+
+Called before a child is removed.
+
+**NOTE:** Only available after `createChildren` is called.
+
+#### `__childDidLayout: (child) -> void`
+
+Called after a child's `length` is changed.
+
+**NOTE:** Only available after `createChildren` is called.
+
+#### `__renderEmpty`
+
+Renders a `View` when no children exist.
+
+**NOTE:** Only available after `createChildren` is called.
+
+#### `__renderHeader`
+
+Renders a `View` before the children.
+
+**NOTE:** Only available after `createChildren` is called.
+
+#### `__renderFooter`
+
+Renders a `View` after the header & children.
+
+**NOTE:** Only available after `createChildren` is called.
+
+#### `__renderOverlay`
+
+Renders a `View` after the header, children, & footer.
+
+Use `position: "absolute"` to achieve an overlay effect.
+
+**NOTE:** Only available after `createChildren` is called.

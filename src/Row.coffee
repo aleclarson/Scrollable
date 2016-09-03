@@ -27,18 +27,17 @@ type.defineValues (options) ->
 
   _element: options.element
 
-  _root: null
-
 type.defineValues
 
   __renderContents: ->
     if @_element then -> @_element
     else if @_render then -> @_render @_props
 
-type.defineBoundMethods
+#
+# Prototype-related
+#
 
-  _rootDidRef: (view) ->
-    @_root = if view then view.child else null
+type.defineBoundMethods
 
   _rootDidLayout: (event) ->
     {layout} = event.nativeEvent
@@ -47,30 +46,9 @@ type.defineBoundMethods
     return if newLength is oldLength = @_length
 
     @_setLength newLength
-    @_section._childDidLayout this, newLength - oldLength
-
-    # @_isVisible = @scroll._isAreaVisible @_offset, newLength
+    @_section.__childDidLayout this, newLength - oldLength
     @_didLayout.emit()
     return
-
-type.defineMethods
-
-  attachRoot: ->
-    @_root.setNativeProps
-      style: {position: "relative", opacity: 1}
-
-  detachRoot: ->
-    @_root.setNativeProps
-      style: {position: "absolute", opacity: 0}
-
-type.overrideMethods
-
-  __lengthDidChange: (length) ->
-
-    if length isnt null
-      @isFirst and @_offset = 0
-
-    @__super arguments
 
 #
 # Rendering
@@ -80,7 +58,10 @@ type.render ->
   return View
     key: @_key
     ref: @_rootDidRef
-    style: @styles.container()
+    style: [
+      @styles.container()
+      @_rootStyle
+    ]
     children: @__renderContents()
     onLayout: @_rootDidLayout
 

@@ -112,7 +112,6 @@ module.exports = ScrollHeader = type.build()
 
   # _createScrollListener: ->
   #   @_scrollListener = @scroll.didScroll (offset) =>
-  #     log.it "#{@__id}.offset = " + offset
   #     # if offset > @y
   #     # @view.stickyHeaderTop.value =
 
