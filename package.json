@@ -14,7 +14,7 @@
     "Event": "aleclarson/Event#2.0.1",
     "Nan": "aleclarson/Nan#1.1.0",
     "Null": "aleclarson/Null#1.0.0",
-    "Promise": "aleclarson/Promise#1.0.0",
+    "Promise": "aleclarson/Promise#2.0.0",
     "Range": "aleclarson/Range#1.0.0",
     "ReactiveList": "aleclarson/ReactiveList#1.1.0",
     "ReactiveRange": "aleclarson/ReactiveRange#1.0.0",
