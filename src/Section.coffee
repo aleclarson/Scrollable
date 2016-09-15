@@ -76,16 +76,18 @@ type.defineValues (options) ->
 
   _mountingRange: null
 
-type.defineListeners
+type.defineListeners ->
 
-  _mountedRangeListener: ->
-    @_mountedRange.didSet (newRange, oldRange) =>
-      if isDev
-        if newRange[0] < 0 or newRange[0] > @_children.length - 1
-          throw Error "Index out of range: " + newRange[0]
-        if newRange[1] < 0 or newRange[1] > @_children.length - 1
-          throw Error "Index out of range: " + newRange[1]
-      @_mountingRange = @_trackMountingRange newRange, oldRange
+  @_mountedRange.didSet (newRange, oldRange) =>
+
+    if isDev
+      if newRange[0] < 0 or newRange[0] > @_children.length - 1
+        throw Error "Index out of range: " + newRange[0]
+      if newRange[1] < 0 or newRange[1] > @_children.length - 1
+        throw Error "Index out of range: " + newRange[1]
+
+    @_mountingRange = @_trackMountingRange newRange, oldRange
+    return
 
 #
 # Prototype-related
@@ -159,6 +161,7 @@ type.defineMethods
 
     @_children.append child
     @_elements.children.push no
+    log.it @__name + "._children.length = " + @_children.length
     return
 
   # TODO: Support inserting arrays of children.
@@ -278,14 +281,18 @@ type.defineMethods
     if oldRange[0] - newRange[0] > 0
       index = oldRange[0]
       while --index >= newRange[0]
-        promises.push children[index]._trackMounting()
+        child = children[index]
+        @__childWillMount child
+        promises.push child._trackMounting()
 
     # Find new children that are being
     # rendered *below* the 'mountedRange'.
     if newRange[1] - oldRange[1] > 0
       index = oldRange[1]
       while ++index <= newRange[1]
-        promises.push children[index]._trackMounting()
+        child = children[index]
+        @__childWillMount child
+        promises.push child._trackMounting()
 
     # Update even if there are no children being mounted,
     # because some children might need to be unmounted.
@@ -432,9 +439,7 @@ type.defineMethods
 
 type.overrideMethods
 
-  __onReveal: ->
-
-    @__super arguments
+  __didReveal: ->
 
     if @_section
       @_section.__childDidLayout this, @_length
@@ -442,6 +447,10 @@ type.overrideMethods
     @_updateVisibility()
     @_revealMountedRange()
     return
+
+  __offsetDidChange: (offset) ->
+    log.it @__name + ".offset = " + offset
+    @__super arguments
 
   __lengthDidChange: (length, oldLength) ->
 
@@ -453,7 +462,7 @@ type.overrideMethods
     @didLayout.emit()
     return
 
-  __getMountDeps: ->
+  __willMount: ->
     [startIndex, endIndex] = @_mountedRange.get()
     return if startIndex > endIndex
 
@@ -479,9 +488,15 @@ type.defineHooks
 
   __childWillDetach: emptyFunction
 
+  __childWillMount: emptyFunction
+
   __childDidLayout: (child, lengthChange) ->
     @_setLength @_length + lengthChange
     return
+
+  __childDidReveal: emptyFunction
+
+  __childDidConceal: emptyFunction
 
 #
 # Rendering

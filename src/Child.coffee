@@ -14,7 +14,9 @@ type.defineValues
 
   _root: null
 
-  _rootStyle: revealedStyle
+  # Although '_isConcealed' defaults to false, we don't want
+  # to show this child until '_reveal' is called.
+  _rootStyle: concealedStyle
 
   _mounting: null
 
@@ -28,9 +30,9 @@ type.defineReactiveValues
 
   _index: null
 
-  _offset: null
-
   _length: null
+
+  _offset: null
 
   _isRevealed: no
 
@@ -39,7 +41,7 @@ type.defineReactiveValues
   _inVisibleArea: null
 
 type.willMount ->
-  @_mountDeps = @__getMountDeps()
+  @_mountDeps = @__willMount()
 
 type.didMount ->
   @_mounting and @_mounting.resolve()
@@ -52,19 +54,23 @@ type.defineGetters
 
   index: -> @_index
 
+  length: -> @_length
+
   startOffset: -> @_offset
 
   endOffset: -> @_offset + @_length
 
-  length: -> @_length
-
-  isMounted: -> @_mounting and @_mounting.promise.isFulfilled
+  isMounted: ->
+    return no unless @_mounting
+    return @_mounting.promise.isFulfilled
 
   isRevealed: -> @_isRevealed
 
   isConcealed: -> @_isConcealed
 
-  isConcealedByParent: -> @_section and not @_section.isRevealed
+  isConcealedByParent: ->
+    return no unless @_section
+    return not @_section.isRevealed
 
   inVisibleArea: -> @_inVisibleArea
 
@@ -100,7 +106,7 @@ type.defineMethods
     @_rootStyle = concealedStyle
     if @_root and @isMounted
       @_root.setNativeProps {style: concealedStyle}
-      @__onConceal()
+      @_conceal()
     return
 
   _reveal: ->
@@ -109,11 +115,27 @@ type.defineMethods
       if @_isRevealed
         return console.warn "Already revealed!"
       if @_offset isnt null
-        return console.warn "'_offset' cannot be set before '__onReveal'!"
+        return console.warn "'_offset' cannot be set before '__didReveal'!"
 
     @_isRevealed = yes
     @_root.setNativeProps {style: revealedStyle}
-    @__onReveal()
+    @_setOffsetFromAbove()
+    @__didReveal()
+    if @_section
+      @_section.__childDidReveal this
+    return
+
+  _conceal: ->
+
+    if isDev and not @_isRevealed
+      throw Error "Already concealed!"
+
+    @_isRevealed = no
+    @_inVisibleArea = null
+    @_setOffset null
+    @__didConceal()
+    if @_section
+      @_section.__childDidConceal this
     return
 
   _setSection: (section) ->
@@ -124,17 +146,28 @@ type.defineMethods
       @__sectionDidInsert()
     return
 
-  _setOffset: (offset) ->
-    if offset isnt oldOffset = @_offset
-      log.it @__name + ".offset = " + offset
-      @_offset = offset
-      @__offsetDidChange offset, oldOffset
-    return
-
   _setLength: (length) ->
     if length isnt oldLength = @_length
       @_length = length
       @__lengthDidChange length, oldLength
+    return
+
+  _setOffset: (offset) ->
+    if offset isnt oldOffset = @_offset
+      @_offset = offset
+      @__offsetDidChange offset, oldOffset
+    return
+
+  _setOffsetFromAbove: ->
+
+    childAbove = @_section and @_section.get @_index - 1
+    if childAbove and childAbove.isMounted
+      return if childAbove.length is null
+      if childAbove.isRevealed
+        @_setOffset childAbove.endOffset
+        return
+
+    @_setOffset 0
     return
 
   _trackMounting: ->
@@ -146,7 +179,7 @@ type.defineMethods
 
     promise = promise
       .then => @_mountDeps
-      .then => @__onMountFinish()
+      .then => @__didMount()
 
     @_mounting = {resolve, promise}
     return promise
@@ -165,32 +198,18 @@ type.defineMethods
 
 type.defineHooks
 
-  __getMountDeps: emptyFunction
+  __willMount: emptyFunction
 
-  __onMountFinish: ->
-    log.it @__name + ".isMounted = true"
-    @_reveal() unless @_isConcealed or @isConcealedByParent
+  __didMount: ->
+    @_reveal() unless (
+      @isConcealed or
+      @isConcealedByParent
+    )
     return
 
-  __onReveal: ->
+  __didReveal: emptyFunction
 
-    if @_section
-      childAbove = @_section.get @_index - 1
-
-      if childAbove
-        return if childAbove.length is null
-        if childAbove.isRevealed
-          @_setOffset childAbove.endOffset
-          return
-
-    @_setOffset 0
-    return
-
-  __onConceal: ->
-    @_isRevealed = no
-    @_inVisibleArea = null
-    @_setOffset null
-    return
+  __didConceal: emptyFunction
 
   __offsetDidChange: (offset) ->
     @_onLayout offset, @_length

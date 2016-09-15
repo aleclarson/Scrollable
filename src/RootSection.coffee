@@ -61,9 +61,21 @@ type.overrideMethods
     @_scroll.__childWillDetach child
     return
 
+  __childWillMount: (child) ->
+    @_scroll.__childWillMount child
+    return
+
   __childDidLayout: (child, lengthChange) ->
     @_setLength @_length + lengthChange
     @_scroll.__childDidLayout child, lengthChange
+    return
+
+  __childDidReveal: (child) ->
+    @_scroll.__childDidReveal child
+    return
+
+  __childDidConceal: (child) ->
+    @_scroll.__childDidConceal child
     return
 
 module.exports = type.build()

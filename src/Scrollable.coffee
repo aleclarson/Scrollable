@@ -84,10 +84,6 @@ type.defineFrozenValues (options) ->
     maxVelocity: 3
     elasticity: options.elasticity
 
-#
-# Prototype-related
-#
-
 type.defineEvents
 
   # Emits when 'offset' is changed.
@@ -98,6 +94,10 @@ type.defineEvents
 
   # Emits when 'offset' gets close enough to 'endOffset'.
   didReachEnd: null
+
+#
+# Prototype-related
+#
 
 type.defineGetters
 
@@ -145,12 +145,12 @@ type.definePrototype
   minOffset:
     get: -> @_edgeOffsets[0] or 0
     set: (minOffset) ->
-      @_edgeOffsets[0] = minOffset
+      @_edgeOffsets[0] = Device.round minOffset
 
   maxOffset:
     get: -> @_edgeOffsets[1] or 0
     set: (maxOffset) ->
-      @_edgeOffsets[1] = maxOffset
+      @_edgeOffsets[1] = Device.round maxOffset
 
   isTouchable:
     get: -> @_touchable
@@ -170,6 +170,8 @@ type.defineMethods
     assertType offset, Number
     assertType config, Object
     config.endValue = 0 - offset
+    # if isType config.velocity, Number
+    #   config.velocity = 0 - config.velocity
     return @_drag.offset.animate config
 
   stopScrolling: ->
@@ -180,7 +182,7 @@ type.defineMethods
   _onLayout: ->
     @_reachedEnd = no
     @_updateReachedEnd @_offset.value, @_endOffset
-    @_events.emit "didLayout"
+    @__events.didLayout()
     return
 
   _setContentLength: (newLength) ->
@@ -212,7 +214,7 @@ type.defineMethods
     newValue = @__isEndReached offset, endOffset
     return if @_reachedEnd is newValue
     if @_reachedEnd = newValue
-      @_events.emit "didReachEnd"
+      @__events.didReachEnd()
     return
 
   _rebound: (velocity) ->
@@ -224,10 +226,11 @@ type.defineMethods
     if velocity > 0
       velocity *= 300
 
-    log.it @__name + "._rebound: {offset: #{@offset}, velocity: #{velocity}}"
+    # log.it @__name + "._rebound: {offset: #{@offset}, velocity: #{velocity}}"
     @_edge.rebound {
       velocity
-      onEnd: @_onReboundEnd
+      onUpdate: @_reboundDidUpdate
+      onEnd: @_reboundDidEnd
     }
 
   _isScrollingFast: ->
@@ -245,8 +248,8 @@ type.defineMethods
 
   _updateEdgeOffsets: ->
     @_edgeOffsets = [
-      @__computeMinOffset()
-      @__computeMaxOffset()
+      Device.round @__computeMinOffset()
+      Device.round @__computeMaxOffset()
     ]
     return
 
@@ -270,24 +273,30 @@ type.defineMethods
 
 type.defineBoundMethods
 
-  _onDragStart: (gesture) ->
+  _dragDidStart: (gesture) ->
     @stopScrolling()
     gesture._startOffset = 0 - @_computeRawOffset()
-    @__onDragStart gesture
+    @__dragDidStart gesture
     return
 
-  _onScroll: (offset) ->
+  _offsetDidChange: (offset) ->
 
     if @inBounds
       @_updateReachedEnd offset, @_endOffset
       # @_children and @_children.updateVisibleRange()
 
-    @__onScroll offset
-    @_events.emit "didScroll", [offset]
+    @__offsetDidChange offset
+    @__events.didScroll offset
+    return
 
-  _onReboundEnd: (finished) ->
+  _reboundDidUpdate: (offset) ->
+    @__reboundDidUpdate offset
+    return
+
+  _reboundDidEnd: (finished) ->
     finished and @_edgeIndex = null
-    @__onReboundEnd finished
+    @__reboundDidEnd finished
+    return
 
 type.defineHooks
 
@@ -316,17 +325,15 @@ type.defineHooks
     (endOffset isnt 0) and
     (endOffset - @_endThreshold <= offset)
 
-  __onDragStart: emptyFunction
+  __dragDidStart: emptyFunction
 
-  __onDragEnd: (gesture) ->
+  __dragDidMove: emptyFunction
+
+  __dragDidEnd: (gesture) ->
     return if @inBounds
     {velocity} = gesture
     velocity *= -1 if @_edgeIndex is 0
     @_rebound velocity
-
-  __onScroll: emptyFunction
-
-  __onReboundEnd: emptyFunction
 
   __computeOffset: (offset, minOffset, maxOffset) ->
 
@@ -351,13 +358,25 @@ type.defineHooks
     return 0 if @visibleLength is null
     return Math.max 0, @_endOffset - @visibleLength
 
+  __offsetDidChange: emptyFunction
+
+  __reboundDidUpdate: emptyFunction
+
+  __reboundDidEnd: emptyFunction
+
   __childWillAttach: emptyFunction.thatReturnsArgument
 
   __childDidAttach: emptyFunction
 
   __childWillDetach: emptyFunction
 
+  __childWillMount: emptyFunction
+
   __childDidLayout: emptyFunction
+
+  __childDidReveal: emptyFunction
+
+  __childDidConceal: emptyFunction
 
 #
 # View-related
@@ -396,12 +415,15 @@ type.defineNativeValues
 
 type.defineMountedListeners ->
 
-  @_offset.didSet @_onScroll
+  @_offset.didSet @_offsetDidChange
 
-  @_drag.didGrant @_onDragStart
+  @_drag.didGrant @_dragDidStart
+
+  @_drag.didTouchMove (gesture) =>
+    @__dragDidMove gesture
 
   @_drag.didEnd (gesture) =>
-    @__onDragEnd gesture
+    @__dragDidEnd gesture
 
 type.defineStyles
 
