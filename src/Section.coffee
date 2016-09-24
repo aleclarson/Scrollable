@@ -1,8 +1,6 @@
 
 # TODO: Save memory by replacing offscreen children with empty views of the same length.
 
-require "isDev"
-
 {Type, Style} = require "modx"
 {Number} = require "Nan"
 {View} = require "modx/views"
@@ -14,6 +12,7 @@ assertType = require "assertType"
 Promise = require "Promise"
 Event = require "Event"
 Range = require "Range"
+isDev = require "isDev"
 sync = require "sync"
 
 SectionHeader = require "./SectionHeader"

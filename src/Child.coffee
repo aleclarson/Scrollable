@@ -4,6 +4,7 @@
 emptyFunction = require "emptyFunction"
 Promise = require "Promise"
 Event = require "Event"
+isDev = require "isDev"
 
 revealedStyle = {position: "relative", opacity: 1}
 concealedStyle = {position: "absolute", opacity: 0}
