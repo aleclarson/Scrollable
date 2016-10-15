@@ -151,7 +151,7 @@ type.defineMethods
 
     @_children.prepend child
     @_elements.children.unshift no
-    return
+    return child
 
   append: (child) ->
 
@@ -161,7 +161,7 @@ type.defineMethods
     @_children.append child
     @_elements.children.push no
     log.it @__name + "._children.length = " + @_children.length
-    return
+    return child
 
   # TODO: Support inserting arrays of children.
   insert: (index, child) ->
@@ -178,7 +178,7 @@ type.defineMethods
 
     @_elements.children.splice index, 0, no
     @_children.insert index, child
-    return
+    return child
 
   remove: (index) ->
     assertType index, Number
