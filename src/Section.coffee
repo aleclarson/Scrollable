@@ -226,6 +226,9 @@ type.defineMethods
     else range @_mountedRange
     return @_mountingRange
 
+  mountAll: ->
+    @mount [0, @_children.length - 1]
+
   # Pass a negative 'distance' to mount
   # any children before the 'mountedRange'.
   mountOffscreen: (distance) ->
