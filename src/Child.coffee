@@ -62,16 +62,18 @@ type.defineGetters
   endOffset: -> @_offset + @_length
 
   isMounted: ->
-    return no unless @_mounting
-    return @_mounting.promise.isFulfilled
+    if @_mounting
+    then @_mounting.promise.isFulfilled
+    else no
 
   isRevealed: -> @_isRevealed
 
   isConcealed: -> @_isConcealed
 
   isConcealedByParent: ->
-    return no unless @_section
-    return not @_section.isRevealed
+    if @_section
+    then @_section.isRevealed is no
+    else no
 
   inVisibleArea: -> @_inVisibleArea
 
