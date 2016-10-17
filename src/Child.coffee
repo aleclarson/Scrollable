@@ -91,6 +91,7 @@ type.defineBoundMethods
 
   _rootDidRef: (view) ->
     @_root = view
+    @__didMount() if @isMounted
     return
 
 type.defineMethods
@@ -99,8 +100,7 @@ type.defineMethods
     return if not @_isConcealed
     @_isConcealed = no
     @_rootStyle = revealedStyle
-    if @_root and @isMounted
-      @isConcealedByParent or @_reveal()
+    @_tryReveal() if @_root and @isMounted
     return
 
   conceal: ->
@@ -111,6 +111,11 @@ type.defineMethods
       @_root.setNativeProps {style: concealedStyle}
       @_conceal()
     return
+
+  _tryReveal: ->
+    return if @_isRevealed or @_isConcealed
+    return if @isConcealedByParent
+    return @_reveal()
 
   _reveal: ->
 
@@ -182,7 +187,9 @@ type.defineMethods
 
     promise = promise
       .then => @_mountDeps
-      .then => @__didMount()
+      .then =>
+        @__didMount() if @_root
+        return
 
     @_mounting = {resolve, promise}
     return promise
@@ -204,10 +211,7 @@ type.defineHooks
   __willMount: emptyFunction
 
   __didMount: ->
-    @_reveal() unless (
-      @isConcealed or
-      @isConcealedByParent
-    )
+    @_tryReveal()
     return
 
   __didReveal: emptyFunction
