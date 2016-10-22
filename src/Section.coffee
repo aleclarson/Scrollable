@@ -79,10 +79,16 @@ type.defineListeners ->
   @_mountedRange.didSet (newRange, oldRange) =>
 
     if isDev
-      if newRange[0] < 0 or newRange[0] > @_children.length - 1
-        throw Error "Index out of range: " + newRange[0]
-      if newRange[1] < 0 or newRange[1] > @_children.length - 1
-        throw Error "Index out of range: " + newRange[1]
+
+      if @_children.length is 0
+        if newRange[0] isnt 0 or newRange[1] isnt -1
+          throw RangeError "Invalid index range!"
+
+      else if newRange[0] < 0 or newRange[0] >= @_children.length
+        throw RangeError "Invalid start index: #{newRange[0]}"
+
+      else if newRange[1] < 0 and newRange[1] >= @_children.length
+        throw RangeError "Invalid end index: #{newRange[1]}"
 
     @_mountingRange = @_trackMountingRange newRange, oldRange
     return
@@ -286,21 +292,12 @@ type.defineMethods
     children = @_children.array
     promises = []
 
-    # Find new children that are being
-    # rendered *above* the 'mountedRange'.
-    if oldRange[0] - newRange[0] > 0
-      index = oldRange[0]
-      while --index >= newRange[0]
-        child = children[index]
-        @__childWillMount child
-        promises.push child._trackMounting()
-
-    # Find new children that are being
-    # rendered *below* the 'mountedRange'.
-    if newRange[1] - oldRange[1] > 0
-      index = oldRange[1]
-      while ++index <= newRange[1]
-        child = children[index]
+    index = newRange[0] - 1
+    while ++index <= newRange[1]
+      child = children[index]
+      if child._mounting
+        promises.push child._mounting.promise
+      else
         @__childWillMount child
         promises.push child._trackMounting()
 
