@@ -160,7 +160,6 @@ type.defineMethods
 
     @_children.append child
     @_elements.children.push no
-    log.it @__name + "._children.length = " + @_children.length
     return child
 
   # TODO: Support inserting arrays of children.
@@ -436,7 +435,6 @@ type.defineMethods
         @_visibleRange[1] = index
         index += 1
 
-    log.it @__name + ".visibleRange = [ " + @_visibleRange.join(", ") + " ]"
     return
 
 type.overrideMethods
@@ -449,10 +447,6 @@ type.overrideMethods
     @_updateVisibility()
     @_revealMountedRange()
     return
-
-  __offsetDidChange: (offset) ->
-    log.it @__name + ".offset = " + offset
-    @__super arguments
 
   __lengthDidChange: (length, oldLength) ->
 

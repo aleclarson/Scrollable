@@ -226,7 +226,6 @@ type.defineMethods
     if velocity > 0
       velocity *= 300
 
-    # log.it @__name + "._rebound: {offset: #{@offset}, velocity: #{velocity}}"
     @_edge.rebound {
       velocity
       onUpdate: @_reboundDidUpdate
