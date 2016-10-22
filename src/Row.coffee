@@ -19,7 +19,7 @@ type.defineOptions
 
 type.defineValues (options) ->
 
-  _key: options.key
+  key: options.key
 
   _props: options.props
 
@@ -56,7 +56,6 @@ type.defineBoundMethods
 
 type.render ->
   return View
-    key: @_key
     ref: @_rootDidRef
     style: [
       @styles.container()

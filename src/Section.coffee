@@ -37,9 +37,9 @@ type.defineStatics
 
 type.defineFrozenValues (options) ->
 
-  didLayout: Event()
+  key: options.key
 
-  _key: options.key
+  didLayout: Event()
 
   _header: options.header
 
@@ -509,7 +509,6 @@ type.defineProps
 
 type.render ->
   return View
-    key: @_key
     ref: @_rootDidRef
     style: [
       @styles.container()
@@ -544,7 +543,8 @@ type.defineMethods
     index = startIndex - 1
     while ++index <= endIndex
       continue if elements[index] isnt no
-      elements[index] = children[index].render()
+      child = children[index]
+      elements[index] = child.render {key: child.key}
 
     return View
       style: @styles.contents()
