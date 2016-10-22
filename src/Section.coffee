@@ -13,7 +13,6 @@ Promise = require "Promise"
 Event = require "Event"
 Range = require "Range"
 isDev = require "isDev"
-sync = require "sync"
 
 SectionHeader = require "./SectionHeader"
 ScrollChild = require "./Child"
@@ -169,8 +168,8 @@ type.defineMethods
     isDev and @_children._assertValidIndex index
 
     children = @_children._array
-    sync.repeat numChildren - index, (offset) ->
-      children[index + offset]._index += 1
+    @_traverseChildren index, (child) ->
+      child._index += 1
 
     child = @_attachChild child, index
     assertType child, ScrollChild.Kind
@@ -184,27 +183,29 @@ type.defineMethods
     isDev and @_children._assertValidIndex index
 
     children = @_children._array
-    @_detachChild children[index]
+    childRemoved = children[index]
 
-    childAbove = children[index - 1]
-    sync.repeat @_children.length - index, (offset) ->
-      child = children[index + offset]
+    @_detachChild childRemoved
+    @_elements.children.splice index, 1
+    @_children.remove index
+
+    childAbove = childRemoved
+    @_traverseChildren index, (child) ->
       child._index -= 1
-      log.it @__name + ".index = " + child._index
 
-      if child.isRevealed and
-         childAbove and
-         childAbove.length isnt null
+      if child.isRevealed
 
-        if childAbove.isRevealed
-          child._setOffset childAbove.startOffset + childAbove.length
-        else child._setOffset 0
+        if childAbove and childAbove.length isnt null
+          if childAbove.isRevealed
+          then child._setOffset childAbove.startOffset + childAbove.length
+          else child._setOffset 0
+
+      # Stop traversing if we reached the end of revealed children.
+      else if childAbove and childAbove.isRevealed
+        return no
 
       childAbove = child
-
-    @_elements.children.splice index, count
-    @_children.remove index
-    return
+      return yes
 
   removeAll: ->
     return if @_children.length is 0
@@ -269,6 +270,14 @@ type.defineMethods
 
     if child instanceof ScrollSection
       child._scroll = null
+    return
+
+  _traverseChildren: (startIndex, iterator) ->
+    {length} = children = @_children
+    index = startIndex - 1
+    while ++index < length
+      result = iterator children._array[index], index
+      break if result is no
     return
 
   _trackMountingRange: (newRange, oldRange) ->
