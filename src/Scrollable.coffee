@@ -10,6 +10,7 @@ assertType = require "assertType"
 clampValue = require "clampValue"
 Draggable = require "Draggable"
 isType = require "isType"
+Event = require "Event"
 Null = require "Null"
 bind = require "bind"
 
@@ -84,7 +85,7 @@ type.defineFrozenValues (options) ->
     maxVelocity: 3
     elasticity: options.elasticity
 
-type.defineEvents
+type.addMixin Event.Mixin,
 
   # Emits when 'offset' is changed.
   didScroll: {offset: Number}
@@ -412,7 +413,7 @@ type.defineNativeValues
     return "auto" if @isTouchable
     return "none"
 
-type.defineMountedListeners ->
+type.defineListeners ->
 
   @_offset.didSet @_offsetDidChange
 
