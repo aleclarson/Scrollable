@@ -58,7 +58,7 @@ type.defineMethods
 # Rendering
 #
 
-type.defineNativeValues (options) ->
+type.defineAnimatedValues (options) ->
 
   _offset: 0
 

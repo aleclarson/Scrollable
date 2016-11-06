@@ -1,6 +1,5 @@
 
 {Type, Device, Style, Children} = require "modx"
-{NativeValue} = require "modx/native"
 {Number} = require "Nan"
 {View} = require "modx/views"
 
@@ -43,13 +42,13 @@ type.defineStatics
 
 type.defineReactiveValues
 
-  _touchable: yes
-
   _visibleLength: null
 
   _contentLength: null
 
   _reachedEnd: no
+
+  _touchable: yes
 
 type.defineValues (options) ->
 
@@ -85,6 +84,30 @@ type.defineFrozenValues (options) ->
     maxVelocity: 3
     elasticity: options.elasticity
 
+type.defineReactions
+
+  _edgeDelta: ->
+    offset = 0 - @_drag.offset.get()
+    if offset < (minOffset = @minOffset)
+      @_edgeIndex = 0
+      @_edge.delta = minOffset - offset
+    else if offset > (maxOffset = @maxOffset)
+      @_edgeIndex = 1
+      @_edge.delta = offset - maxOffset
+    else
+      @_edgeIndex = null
+      @_edge.delta = 0
+    return
+
+  _containerEvents: ->
+    if @_touchable then "auto" else "none"
+
+  _offset: ->
+    offset = 0 - @_drag.offset.get()
+    offset = @__computeOffset offset, @minOffset, @maxOffset
+    assertType offset, Number
+    return Device.round 0 - offset
+
 type.addMixin Event.Mixin,
 
   # Emits when 'offset' is changed.
@@ -95,6 +118,18 @@ type.addMixin Event.Mixin,
 
   # Emits when 'offset' gets close enough to 'endOffset'.
   didReachEnd: null
+
+type.defineListeners -> do =>
+
+  @_offset.didSet @_offsetDidChange
+
+  @_drag.didGrant @_dragDidStart
+
+  @_drag.didTouchMove (gesture) =>
+    @__dragDidMove gesture
+
+  @_drag.didEnd (gesture) =>
+    @__dragDidEnd gesture
 
 #
 # Prototype-related
@@ -139,9 +174,9 @@ type.defineGetters
 type.definePrototype
 
   offset:
-    get: -> 0 - @_offset.value
+    get: -> 0 - @_offset.get()
     set: (offset) ->
-      @_drag.offset.value = 0 - offset
+      @_drag.offset.set 0 - offset
 
   minOffset:
     get: -> @_edgeOffsets[0] or 0
@@ -182,7 +217,7 @@ type.defineMethods
 
   _onLayout: ->
     @_reachedEnd = no
-    @_updateReachedEnd @_offset.value, @_endOffset
+    @_updateReachedEnd @_offset.get(), @_endOffset
     @__events.didLayout()
     return
 
@@ -244,7 +279,7 @@ type.defineMethods
       if @_edgeIndex is 0
         return @edgeOffset - @_edge.resist()
       return @edgeOffset + @_edge.resist()
-    return clampValue 0 - @_drag.offset.value, @minOffset, @maxOffset
+    return clampValue 0 - @_drag.offset.get(), @minOffset, @maxOffset
 
   _updateEdgeOffsets: ->
     @_edgeOffsets = [
@@ -385,45 +420,6 @@ type.defineHooks
 type.defineProps
   style: Style
   children: Children
-
-type.defineReactions
-
-  _edgeDelta: ->
-    offset = 0 - @_drag.offset.value
-    if offset < (minOffset = @minOffset)
-      @_edgeIndex = 0
-      @_edge.delta = minOffset - offset
-    else if offset > (maxOffset = @maxOffset)
-      @_edgeIndex = 1
-      @_edge.delta = offset - maxOffset
-    else
-      @_edgeIndex = null
-      @_edge.delta = 0
-    return
-
-type.defineNativeValues
-
-  _offset: ->
-    offset = 0 - @_drag.offset.value
-    offset = @__computeOffset offset, @minOffset, @maxOffset
-    assertType offset, Number
-    return Device.round 0 - offset
-
-  _pointerEvents: ->
-    return "auto" if @isTouchable
-    return "none"
-
-type.defineListeners ->
-
-  @_offset.didSet @_offsetDidChange
-
-  @_drag.didGrant @_dragDidStart
-
-  @_drag.didTouchMove (gesture) =>
-    @__dragDidMove gesture
-
-  @_drag.didEnd (gesture) =>
-    @__dragDidEnd gesture
 
 type.defineStyles
 
