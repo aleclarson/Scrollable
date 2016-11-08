@@ -29,7 +29,7 @@ type.initArgs ([options]) ->
 
   options.stretchLimit ?=
     if options.axis is "x"
-      Device.width
+    then Device.width
     else Device.height
 
 type.defineStatics
@@ -205,7 +205,7 @@ type.defineMethods
   scrollTo: (offset, config) ->
     assertType offset, Number
     assertType config, Object
-    config.endValue = 0 - offset
+    config.toValue = 0 - offset
     # if isType config.velocity, Number
     #   config.velocity = 0 - config.velocity
     return @_drag.offset.animate config
@@ -351,9 +351,8 @@ type.defineHooks
     @_drag.offset.isAnimating
 
   __getVelocity: ->
-    {animation} = @_drag.offset
-    if animation then 0
-    else animation.velocity
+    anim = @_drag.offset._animation
+    if anim then anim.velocity else 0
 
   __isEndReached: (offset, endOffset) ->
     (endOffset isnt null) and
