@@ -97,7 +97,7 @@ type.defineBoundMethods
 type.defineMethods
 
   reveal: ->
-    return if not @_isConcealed
+    return unless @_isConcealed
     @_isConcealed = no
     @_rootStyle = revealedStyle
     @_tryReveal() if @_root and @isMounted
@@ -126,6 +126,7 @@ type.defineMethods
         return console.warn "'_offset' cannot be set before '__didReveal'!"
 
     @_isRevealed = yes
+    @_rootStyle = revealedStyle
     @_root.setNativeProps {style: revealedStyle}
     @_setOffsetFromAbove()
     @__didReveal()
@@ -149,7 +150,7 @@ type.defineMethods
   _setSection: (section) ->
     if section isnt oldSection = @_section
       @__sectionWillRemove() if oldSection
-      return if not section
+      return unless section
       @_section = section
       @__sectionDidInsert()
     return

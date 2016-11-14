@@ -77,8 +77,6 @@ type.defineHooks
 type.defineStyles
 
   container:
-    position: "absolute"
     overflow: "hidden"
-    opacity: 0
 
 module.exports = type.build()
