@@ -52,6 +52,16 @@ type.defineReactiveValues
 
 type.defineValues (options) ->
 
+  # Emits when 'offset' is changed.
+  didScroll: Event.sync
+    argTypes: {offset: Number}
+
+  # Emits when 'contentLength' or 'endOffset' is changed.
+  didLayout: Event.sync()
+
+  # Emits when 'offset' gets close enough to 'endOffset'.
+  didReachEnd: Event.sync()
+
   # The root section that measures any children. (optional)
   _children: null
 
@@ -107,17 +117,6 @@ type.defineReactions
     offset = @__computeOffset offset, @minOffset, @maxOffset
     assertType offset, Number
     return Device.round 0 - offset
-
-type.addMixin Event.Mixin,
-
-  # Emits when 'offset' is changed.
-  didScroll: {offset: Number}
-
-  # Emits when 'contentLength' or 'endOffset' is changed.
-  didLayout: null
-
-  # Emits when 'offset' gets close enough to 'endOffset'.
-  didReachEnd: null
 
 type.defineListeners -> do =>
 
@@ -218,7 +217,7 @@ type.defineMethods
   _onLayout: ->
     @_reachedEnd = no
     @_updateReachedEnd @_offset.get(), @_endOffset
-    @__events.didLayout()
+    @didLayout.emit()
     return
 
   _setContentLength: (newLength) ->
@@ -250,7 +249,7 @@ type.defineMethods
     newValue = @__isEndReached offset, endOffset
     return if @_reachedEnd is newValue
     if @_reachedEnd = newValue
-      @__events.didReachEnd()
+      @didReachEnd.emit()
     return
 
   _rebound: (velocity) ->
@@ -321,7 +320,7 @@ type.defineBoundMethods
       # @_children and @_children.updateVisibleRange()
 
     @__offsetDidChange offset
-    @__events.didScroll offset
+    @didScroll.emit offset
     return
 
   _reboundDidUpdate: (offset) ->
