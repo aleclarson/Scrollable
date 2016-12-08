@@ -1,10 +1,9 @@
 
-{View} = require "modx/views"
-{Type} = require "modx"
-
 emptyFunction = require "emptyFunction"
+ReactType = require "modx/lib/Type"
+View = require "modx/lib/View"
 
-type = Type "Scrollable_SectionHeader"
+type = ReactType "Scrollable_SectionHeader"
 
 type.defineOptions
   sticky: Boolean.withDefault no

@@ -25,6 +25,7 @@
     "emptyFunction": "aleclarson/emptyFunction#1.0.0",
     "isDev": "aleclarson/isDev#2.0.0",
     "isType": "aleclarson/isType#1.0.1",
-    "modx": "aleclarson/modx#2.0.1"
+    "modx": "aleclarson/modx#2.1.0",
+    "react-validators": "aleclarson/react-validators#1.0.1"
   }
 }

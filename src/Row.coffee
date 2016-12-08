@@ -1,13 +1,13 @@
 
-{Type, Element} = require "modx"
-{View} = require "modx/views"
+{Element} = require "react-validators"
 
 emptyFunction = require "emptyFunction"
-Event = require "Event"
+ReactType = require "modx/lib/Type"
+View = require "modx/lib/View"
 
 ScrollChild = require "./Child"
 
-type = Type "Scrollable_Row"
+type = ReactType "Scrollable_Row"
 
 type.inherits ScrollChild
 

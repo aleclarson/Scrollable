@@ -1,21 +1,23 @@
 
-{Type, Device, Style, Children} = require "modx"
+{Style, Children} = require "react-validators"
 {Number} = require "Nan"
-{View} = require "modx/views"
 
 DragResponder = require "DragResponder"
 emptyFunction = require "emptyFunction"
 Rubberband = require "Rubberband"
 assertType = require "assertType"
 clampValue = require "clampValue"
+ReactType = require "modx/lib/Type"
+Device = require "modx/lib/Device"
 isType = require "isType"
 Event = require "Event"
+View = require "modx/lib/View"
 Null = require "Null"
 bind = require "bind"
 
 RootSection = require "./RootSection"
 
-type = Type "Scrollable"
+type = ReactType "Scrollable"
 
 type.defineOptions
   axis: DragResponder.Axis.isRequired
