@@ -3,11 +3,11 @@
 {Number} = require "Nan"
 {View} = require "modx/views"
 
+DragResponder = require "DragResponder"
 emptyFunction = require "emptyFunction"
 Rubberband = require "Rubberband"
 assertType = require "assertType"
 clampValue = require "clampValue"
-Draggable = require "Draggable"
 isType = require "isType"
 Event = require "Event"
 Null = require "Null"
@@ -18,7 +18,7 @@ RootSection = require "./RootSection"
 type = Type "Scrollable"
 
 type.defineOptions
-  axis: Draggable.Axis.isRequired
+  axis: DragResponder.Axis.isRequired
   offset: Number
   endThreshold: Number.withDefault 0
   fastThreshold: Number.withDefault 0.2
@@ -73,7 +73,7 @@ type.defineFrozenValues (options) ->
 
   _endThreshold: options.endThreshold
 
-  _drag: Draggable
+  _drag: DragResponder
     axis: options.axis
     offset: options.offset
     canDrag: (gesture) => @__canDrag gesture

@@ -10,7 +10,7 @@
     "postinstall": "npm run build"
   },
   "dependencies": {
-    "Draggable": "aleclarson/Draggable#2.0.0",
+    "DragResponder": "aleclarson/DragResponder#2.1.0",
     "Event": "aleclarson/Event#2.0.1",
     "Nan": "aleclarson/Nan#1.1.0",
     "Null": "aleclarson/Null#1.0.0",
