@@ -13,7 +13,6 @@ isType = require "isType"
 Event = require "Event"
 View = require "modx/lib/View"
 Null = require "Null"
-bind = require "bind"
 
 RootSection = require "./RootSection"
 

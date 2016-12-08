@@ -20,7 +20,6 @@
     "ReactiveRange": "aleclarson/ReactiveRange#1.0.0",
     "Rubberband": "aleclarson/Rubberband#1.0.0",
     "assertType": "aleclarson/assertType#2.0.1",
-    "bind": "aleclarson/bind#1.0.1",
     "clampValue": "aleclarson/clampValue#1.0.0",
     "emptyFunction": "aleclarson/emptyFunction#1.0.0",
     "isDev": "aleclarson/isDev#2.0.0",
