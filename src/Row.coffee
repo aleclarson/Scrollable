@@ -3,10 +3,13 @@
 {View} = require "modx/views"
 
 emptyFunction = require "emptyFunction"
-assert = require "assert"
 Event = require "Event"
 
+ScrollChild = require "./Child"
+
 type = Type "Scrollable_Row"
+
+type.inherits ScrollChild
 
 type.defineOptions
   key: String
@@ -16,7 +19,7 @@ type.defineOptions
 
 type.defineValues (options) ->
 
-  _key: options.key
+  key: options.key
 
   _props: options.props
 
@@ -24,87 +27,48 @@ type.defineValues (options) ->
 
   _element: options.element
 
-  _didLayout: Event()
-
 type.defineValues
 
   __renderContents: ->
     if @_element then -> @_element
     else if @_render then -> @_render @_props
 
-type.defineReactiveValues
+#
+# Prototype-related
+#
 
-  _index: null
+type.defineBoundMethods
 
-  _offset: null
+  _rootDidLayout: (event) ->
+    {layout} = event.nativeEvent
 
-  _length: 0
+    newLength = layout[if @scroll.isHorizontal then "width" else "height"]
+    return if newLength is oldLength = @_length
 
-  _isVisible: null
-
-type.defineProperties
-
-  _section:
-    value: null
-    reactive: yes
-    didSet: (newValue, oldValue) ->
-      if newValue
-        assert oldValue is null, "'this._section' must be null before setting to a non-null value!"
-        @__onInsert()
-      else if oldValue
-        @__onRemove()
-
-type.defineGetters
-
-  index: -> @_index
-
-  offset: -> @_offset
-
-  length: -> @_length
-
-  isVisible: -> @_isVisible
-
-  section: -> @_section
-
-  scroll: -> @_section.scroll
-
-  didLayout: -> @_didLayout.listenable
-
-type.defineMethods
-
-  _onLayout: (layout) ->
-    {scroll} = this
-    @_offset = layout[scroll.axis]
-    @_length = layout[if scroll.axis is "x" then "width" else "height"]
-    @_isVisible = scroll._isAreaVisible @_offset, @_length
+    @_setLength newLength
+    @_section.__childDidLayout this, newLength - oldLength
     @_didLayout.emit()
-
-type.defineHooks
-
-  __onInsert: emptyFunction
-
-  __onRemove: emptyFunction
+    return
 
 #
 # Rendering
 #
 
-type.shouldUpdate ->
-  return no
-
 type.render ->
   return View
-    key: @_key
-    style: @styles.container()
+    ref: @_rootDidRef
+    style: [
+      @styles.container()
+      @_rootStyle
+    ]
     children: @__renderContents()
-    onLayout: (event) =>
-      @_onLayout event.nativeEvent.layout
+    onLayout: @_rootDidLayout
 
 type.willMount ->
-  @_props and @_props.row = this
+  @props.row = this
 
-type.willUnmount ->
-  @_props and @_props.row = null
+type.willReceiveProps (props) ->
+  props.row = this
 
 type.defineHooks
 
@@ -114,6 +78,5 @@ type.defineStyles
 
   container:
     overflow: "hidden"
-    opacity: -> @opacity
 
 module.exports = type.build()

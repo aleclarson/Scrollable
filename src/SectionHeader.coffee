@@ -3,7 +3,6 @@
 {Type} = require "modx"
 
 emptyFunction = require "emptyFunction"
-assert = require "assert"
 
 type = Type "Scrollable_SectionHeader"
 
@@ -27,10 +26,10 @@ type.defineGetters
 
 type.definePrototype
 
-  top:
-    get: -> @_top.value
+  offset:
+    get: -> @_offset.value
     set: (newValue) ->
-      @_top.value = newValue
+      @_offset.value = newValue
 
   length:
     get: -> @_length.value
@@ -48,7 +47,8 @@ type.defineMethods
     length = layout[if scroll.axis is "x" then "width" else "height"]
 
     if @_length.value > 0
-      assert @_length.value is length, "Predicted length does not match real length!"
+      if @_length.value isnt length
+        throw Error "Predicted length does not match real length!"
       return
 
     @_length.value = length
@@ -58,20 +58,21 @@ type.defineMethods
 # Rendering
 #
 
-type.defineNativeValues
+type.defineAnimatedValues (options) ->
 
-  _top: 0
+  _offset: 0
 
-  _length: (options) -> options.length
+  _length: options.length
 
 type.defineStyles
 
   header:
-    flexDirection: -> "row" if @scroll.axis is "y"
     position: "absolute"
-    top: -> @_top
     left: 0
     right: 0
+    translateX: -> @_offset if @scroll.axis is "x"
+    translateY: -> @_offset if @scroll.axis is "y"
+    flexDirection: -> "row" if @scroll.axis is "y"
 
   emptyHeader:
     alignSelf: "stretch"
@@ -111,7 +112,6 @@ module.exports = ScrollHeader = type.build()
 
   # _createScrollListener: ->
   #   @_scrollListener = @scroll.didScroll (offset) =>
-  #     log.it "#{@__id}.offset = " + offset
   #     # if offset > @y
   #     # @view.stickyHeaderTop.value =
 

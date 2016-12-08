@@ -1,30 +1,31 @@
 
-require "isDev"
+# TODO: Save memory by replacing offscreen children with empty views of the same length.
 
 {Type, Style} = require "modx"
+{Number} = require "Nan"
 {View} = require "modx/views"
 
 emptyFunction = require "emptyFunction"
+ReactiveRange = require "ReactiveRange"
+ReactiveList = require "ReactiveList"
 assertType = require "assertType"
-clampValue = require "clampValue"
-fromArgs = require "fromArgs"
-LazyVar = require "LazyVar"
 Promise = require "Promise"
-Random = require "random"
-assert = require "assert"
 Event = require "Event"
-sync = require "sync"
+Range = require "Range"
+isDev = require "isDev"
 
 SectionHeader = require "./SectionHeader"
-ScrollChild = LazyVar -> require "./Child"
+ScrollChild = require "./Child"
 
 type = Type "Scrollable_Section"
 
+type.inherits ScrollChild
+
 type.defineOptions
-  startIndex: Number.withDefault 0
-  endIndex: Number.withDefault 0
+  key: String
+  mountedRange: Range
   batchSize: Number.withDefault 1
-  header: ScrollHeader.Kind
+  header: SectionHeader.Kind
   renderHeader: Function
   renderFooter: Function
   renderEmpty: Function
@@ -35,7 +36,7 @@ type.defineStatics
 
 type.defineFrozenValues (options) ->
 
-  key: Random.id 8
+  key: options.key
 
   didLayout: Event()
 
@@ -47,461 +48,531 @@ type.defineFrozenValues (options) ->
 
   __renderEmpty: options.renderEmpty
 
+type.defineReactiveValues
+
+  _headerLength: null
+
+  _footerLength: null
+
+  _scroll: null
+
 type.defineValues (options) ->
 
   _batchSize: options.batchSize
 
-  # TODO: This can be used to keep the number of
-  #       rendered children down to a reasonable amount.
-  # renderLimit: fromArgs "renderLimit"
-
-  _startIndex: options.startIndex
-
-  _endIndex: options.endIndex
-
-  _rendering: null
-
   _children: ReactiveList()
 
-  _childElements: []
+  _elements:
+    header: no
+    children: []
+    footer: no
+    overlay: no
 
-  _headerElements: []
+  _visibleRange: []
 
-  _footerElement: null
+  _mountedRange: ReactiveRange options.mountedRange or [0, -1]
 
-  _footerLength: null
+  _mountingRange: null
 
-  _section: null
+type.defineListeners ->
 
-  _scroll: null
+  @_mountedRange.didSet (newRange, oldRange) =>
 
-type.defineReactiveValues ->
+    if isDev
 
-  _index: null
+      if @_children.length is 0
+        if newRange[0] isnt 0 or newRange[1] isnt -1
+          throw RangeError "Invalid index range!"
 
-  _offset: null
+      else if newRange[0] < 0 or newRange[0] >= @_children.length
+        throw RangeError "Invalid start index: #{newRange[0]}"
 
-  _length: null
+      else if newRange[1] < 0 and newRange[1] >= @_children.length
+        throw RangeError "Invalid end index: #{newRange[1]}"
 
-  _firstVisibleIndex: null
+    @_mountingRange = @_trackMountingRange newRange, oldRange
+    return
 
-  _lastVisibleIndex: null
+#
+# Prototype-related
+#
 
 type.defineGetters
 
+  array: -> @_children.array
+
   isEmpty: -> @_children.isEmpty
 
-  isVisible: -> @_isVisible
-
-  index: -> @_index
-
-  offset: -> @_offset
-
-  length: -> @_length
-
-  firstVisibleIndex: -> @_firstVisibleIndex
-
-  lastVisibleIndex: -> @_lastVisibleIndex
-
-  section: -> @_section
+  visibleRange: -> @_visibleRange
 
   scroll: -> @_scroll
 
-  _isRoot: -> this is @_scroll._section
-
 type.definePrototype
 
-  children:
-    get: -> @_children.array
-    set: (children) ->
-      assertType children, Array
+  mountedRange:
+    get: -> @_mountedRange.get()
+    set: (range) ->
+      @_mountedRange.set range
 
-      {length} = children
-      elements = new Array length
-      if length
-        section = this
-        children.forEach (child, index) ->
-          section._initChild child, index
-          elements[index] = no
+type.defineBoundMethods
 
-      @_firstVisibleIndex = null
-      @_lastVisibleIndex = null
-      @_isRoot and @_scroll._setContentLength null
+  _headerDidLayout: (event) ->
+    {layout} = event.nativeEvent
+    length = layout[if @_scroll.isHorizontal then "width" else "height"]
+    if length isnt oldLength = @_headerLength
+      @_headerLength = length
+      @_setLength @_length + length - oldLength
+    return
 
-      @_children.array = children
-      @_childElements = elements
-      return
-
-  startIndex:
-    get: -> @_startIndex
-    set: (newValue) ->
-      @_startIndex = clampValue newValue, 0, @_children.length
-
-  endIndex:
-    get: -> @_endIndex
-    set: (newValue) ->
-      @_endIndex = clampValue newValue, 0, @_children.length
+  _footerDidLayout: (event) ->
+    {layout} = event.nativeEvent
+    length = layout[if @_scroll.isHorizontal then "width" else "height"]
+    if length isnt oldLength = @_footerLength
+      @_footerLength = length
+      @_setLength @_length + length - oldLength
+    return
 
 type.defineMethods
 
+  inspect: ->
+    { @index, @startOffset, @endOffset, @length, children: @_children.length, @mountedRange, @visibleRange }
+
   get: (index) ->
-    @_children.get index
+    if Array.isArray index
+      child = @_children.get index.shift()
+      return child if index.length is 0
+      return unless child instanceof ScrollSection
+      return child.get index
+    return @_children.get index
 
-  prepend: (children) ->
-    if Array.isArray children
-      @_prependChildren children
-    else @_prependChild children
-
-  append: (children) ->
-    if Array.isArray children
-      @_appendChildren children
-    else @_appendChild children
-
-  # TODO: Insert an undefined value at 'view._children[index]'
-  insert: (index, child) ->
-
-    assertType index, Number
-    assert index >= 0 and index < @_children.length, { index, reason: "'index' out of bounds!" }
-
-    { length } = children = @_children
-
-    sync.repeat length - index, (offset) ->
-      children[index + offset]._index += 1
-
-    assertType child, ScrollChild.get()
-    @_initChild child, index
-
-    children.splice index, 0, child
-    @_childElements.splice index, 0, no
-    return
-
-  remove: (index, count) ->
-
-    assertType index, Number
-    assertType count, Number
-
-    return if count <= 0
-
-    { length } = children = @_children
-
-    startIndex = Math.min index + count, length
-    sync.repeat length - startIndex, (offset) ->
-      children[startIndex + offset]._index -= 1
-
-    # TODO: Do the removed children need any properties nullified?
-    children.splice index, count
-    @_childElements.splice index, count
-    return
-
-  forceUpdate: ->
-    @view and @view.forceUpdate()
-    return
-
-  # TODO: Support rendering children above the visible region.
-  renderWhile: (shouldRender) ->
-    return Promise() unless shouldRender()
-    return @_rendering ?= Promise.defer (resolve) =>
-
-      @endIndex += @batchSize
-      # @startIndex -= @batchSize if (@endIndex - @startIndex) >= @renderLimit
-
-      onLayout = @didLayout 1, =>
-        @renderWhile shouldRender
-          .then resolve
-
-      onLayout.start()
-      @forceUpdate()
-
-  renderWhileVisible: ->
-
-    if @_scroll.maxOffset isnt null
-      @_renderWhileVisible()
-      return
-
-    onLayout = @_scroll
-      .didLayout 1, => @_renderWhileVisible()
-      .start()
-    return
-
-  updateVisibleRange: ->
-    startOffset = @_scroll.offset
-    endOffset = startOffset + @_scroll.visibleLength
-    if @_firstVisibleIndex is null
-      @_initVisibleRange startOffset, endOffset
-    else @_updateVisibleRange startOffset, endOffset
-
-  _setSection: (newValue) ->
-    oldValue = @_section
-
-    if newValue and oldValue
-      throw Error "Must set section to null first!"
-
-    if @_section = newValue
-      @__onInsert()
-    else if oldValue
-      @__onRemove()
-    return
-
-  _initChild: (child, index) ->
-    child._index = index
-    child._section = this
-    if child instanceof ScrollSection
-      child._scroll = @_scroll
-    return
-
-  _prependChild: (child) ->
-
-    assertType child, ScrollChild.get()
+  prepend: (child) ->
 
     # Increment the `index` of every child.
     @_children.forEach (child) ->
       child._index += 1
 
-    @_initChild child, 0
+    child = @_attachChild child, 0
+    assertType child, ScrollChild.Kind
 
     @_children.prepend child
-    @_childElements.unshift no
-    return
+    @_elements.children.unshift no
+    return child
 
-  _prependChildren: (children) ->
-    return unless length = children.length
+  append: (child) ->
 
-    # Increment the `index` of every child.
-    @_children.forEach (child) ->
-      child._index += length
-
-    section = this
-    elements = new Array length
-    children.forEach (child, index) ->
-      assertType child, ScrollChild.get()
-      section._initChild child, index
-      elements[index] = no
-
-    @_children.prepend children
-    @_childElements = elements.concat @_childElements
-    return
-
-  _appendChild: (child) ->
-
-    assertType child, ScrollChild.get()
-
-    @_initChild child, @_children.length
+    child = @_attachChild child, @_children.length
+    assertType child, ScrollChild.Kind
 
     @_children.append child
-    @_childElements.push no
+    @_elements.children.push no
+    return child
+
+  # TODO: Support inserting arrays of children.
+  insert: (index, child) ->
+    assertType index, Number
+
+    isDev and @_children._assertValidIndex index
+
+    children = @_children._array
+    @_traverseChildren index, (child) ->
+      child._index += 1
+
+    child = @_attachChild child, index
+    assertType child, ScrollChild.Kind
+
+    @_elements.children.splice index, 0, no
+    @_children.insert index, child
+    return child
+
+  remove: (index) ->
+    assertType index, Number
+    isDev and @_children._assertValidIndex index
+
+    children = @_children._array
+    childRemoved = children[index]
+
+    @_detachChild childRemoved
+    @_elements.children.splice index, 1
+    @_children.remove index
+
+    childAbove = childRemoved
+    @_traverseChildren index, (child) ->
+      child._index -= 1
+
+      if child.isRevealed
+
+        if childAbove and childAbove.length isnt null
+          if childAbove.isRevealed
+          then child._setOffset childAbove.startOffset + childAbove.length
+          else child._setOffset 0
+
+      # Stop traversing if we reached the end of revealed children.
+      else if childAbove and childAbove.isRevealed
+        return no
+
+      childAbove = child
+      return yes
+
+  removeAll: ->
+    return if @_children.length is 0
+    @_children.forEach (child) =>
+      @_detachChild child
+
+    @_mountedRange.set [0, -1]
+    @_visibleRange.length = 0
+
+    @_children.length = 0
+    @_elements.children.length = 0
     return
 
-  _appendChildren: (children) ->
-    return unless length = children.length
-    offset = @_children.length
+  mount: (range) ->
+    assertType range, Array.or Function
+    if Array.isArray range
+      @_mountedRange.set range
+    else range @_mountedRange
+    return @_mountingRange
 
-    section = this
-    elements = new Array length
-    children.forEach (child, index) ->
-      assertType child, ScrollChild.get()
-      section._initChild child, index + offset
-      elements[index] = no
+  mountAll: ->
+    @mount [0, @_children.length - 1]
 
-    @_children.append children
-    @_childElements = @_childElements.concat elements
+  # Pass a negative 'distance' to mount
+  # any children before the 'mountedRange'.
+  mountOffscreen: (distance) ->
+    [startIndex, endIndex] = @_mountedRange.get()
+
+    if distance > 0
+      if @_scroll.contentLength < @_scroll.offset + @_scroll.visibleLength + distance
+        @_mountedRange.set [startIndex, endIndex + @_batchSize]
+        return @_mountingRange
+
+    else if @_scroll.offset < 0 - distance
+      @_mountedRange.set [startIndex - @_batchSize, endIndex]
+      return @_mountingRange
+
+    return Promise()
+
+  forceUpdate: (callback) ->
+    @view and @view.forceUpdate callback
     return
 
-  _renderWhileVisible: ->
-    scroll = @_scroll
-    @renderWhile =>
-      return no if @_endIndex is @_children.length
-      endLength = scroll.offset + scroll.visibleLength + scroll.visibleThreshold
-      return scroll.contentLength < endLength
+  # Called when a Row/Section is added to the 'children'.
+  _attachChild: (child, index) ->
+    child = @__childWillAttach child, index
 
-  _isAreaVisible: (offset, length) ->
-    return null if @_scroll.visibleLength is null
-    startOffset = @offset
-    endOffset = top + @_scroll.visibleLength
-    return yes if offset < endOffset
-    return offset + length > startOffset
+    if child instanceof ScrollSection
+      child._scroll = @_scroll
+
+    child._index = index
+    child._setSection this
+
+    @__childDidAttach child
+    return child
+
+  # Called when a Row/Section is removed from the 'children'.
+  _detachChild: (child) ->
+    @__childWillDetach child
+
+    child._setSection null
+
+    if child instanceof ScrollSection
+      child._scroll = null
+    return
+
+  _traverseChildren: (startIndex, iterator) ->
+    {length} = children = @_children
+    index = startIndex - 1
+    while ++index < length
+      result = iterator children._array[index], index
+      break if result is no
+    return
+
+  _trackMountingRange: (newRange, oldRange) ->
+
+    # Wait for all children (in the range) to finish mounting.
+    children = @_children.array
+    promises = []
+
+    index = newRange[0] - 1
+    while ++index <= newRange[1]
+      child = children[index]
+      if child._mounting
+        promises.push child._mounting.promise
+      else
+        @__childWillMount child
+        promises.push child._trackMounting()
+
+    # Update even if there are no children being mounted,
+    # because some children might need to be unmounted.
+    @view and @view.forceUpdate()
+
+    if promises.length
+      return Promise.all promises
+    return Promise()
+
+  _revealMountedRange: ->
+    [startIndex, endIndex] = @_mountedRange.get()
+    children = @_children.array
+    index = startIndex - 1
+    while ++index <= endIndex
+      child = children[index]
+      child._reveal() unless (
+        child.isConcealed or
+        child.isRevealed or
+        not child.isMounted
+      )
+
+    return
+
+  #
+  # Visibility-related
+  #
 
   _getVisibleChildren: ->
-    return null if @_firstVisibleIndex is null
-    return @_children.array.slice @_firstVisibleIndex, @_lastVisibleIndex + 1
+    return null if not @_visibleRange.length
+    return @_children.array.slice @_visibleRange[0], @_visibleRange[1] + 1
+
+  _isChildVisible: (index) ->
+    return null if not @_visibleRange.length
+    return no if index < @_visibleRange[0]
+    return index <= @_visibleRange[1]
+
+  _updateVisibility: ->
+    if visibleArea = @__getVisibleArea()
+      @_inVisibleArea = yes
+      if @_visibleRange.length
+        @_updateVisibleRange visibleArea.startOffset, visibleArea.endOffset
+      else
+        @_initVisibleRange visibleArea.startOffset, visibleArea.endOffset
+      return
+
+    @_inVisibleArea = no
+    @_visibleRange = [-1, -1]
+    return
 
   # Computes the visible range from scratch.
   # TODO: Make this more performant?
   _initVisibleRange: (startOffset, endOffset) ->
     children = @_children._array
-    numChildren = @_children._length
+    numChildren = @_children.length
 
     # TODO: Use an `estimatedRowSize` with `startOffset`
-    #   to help find the `firstVisibleIndex` faster.
+    #   to help find `visibleRange[0]` faster.
     beforeVisibleRange = yes
     lastVisibleIndex = null
 
-    elements = @_childElements
+    elements = @_elements.children
     index = -1
     while ++index < numChildren
       child = children[index]
 
-      if element is no
-        child._isVisible = no
+      if elements[index] is no
+        child._inVisibleArea = no
         continue if beforeVisibleRange
         break
 
       isHidden =
         if beforeVisibleRange
-          (child.offset + child.length) < startOffset
-        else child.offset > endOffset
+          (child.startOffset + child.length) < startOffset
+        else child.startOffset > endOffset
 
       if isHidden
-        child._isVisible = no
+        child._inVisibleArea = no
         continue if beforeVisibleRange
         break
 
-      child._isVisible = yes
+      child._inVisibleArea = yes
       lastVisibleIndex = index
 
       if beforeVisibleRange
         beforeVisibleRange = no
-        @_firstVisibleIndex = index
+        @_visibleRange[0] = index
 
-    @_firstVisibleIndex = null if beforeVisibleRange
-    @_lastVisibleIndex = lastVisibleIndex
+    if beforeVisibleRange
+      @_visibleRange.length = 0
+      return
+
+    @_visibleRange[1] = lastVisibleIndex
     return
 
   # Updates the visible range using its existing values.
   _updateVisibleRange: (startOffset, endOffset) ->
 
-    if @_firstVisibleIndex is null
-      return @_initVisibleRange startOffset, endOffset
+    if not @_visibleRange.length
+      @_initVisibleRange startOffset, endOffset
+      return
 
     children = @_children._array
 
     # Find children outside the visible range
     # that are >= the "first visible index".
-    index = startIndex = @_firstVisibleIndex
+    index = startIndex = @_visibleRange[0]
     while child = children[index]
-      break if (child.offset + child.length) > startOffset
-      @_firstVisibleIndex = index
+      break if (child.startOffset + child.length) > startOffset
+      @_visibleRange[0] = index
       index += 1
 
     # If the "first visible index" did not change...
-    if @_firstVisibleIndex is startIndex
+    if @_visibleRange[0] is startIndex
 
       # Find children inside the visible range
       # that are < the "first visible index".
-      index = @_firstVisibleIndex - 1
+      index = startIndex - 1
       while child = children[index]
-        break if (child.offset + child.length) < startOffset
-        @_firstVisibleIndex = index
+        break if (child.startOffset + child.length) < startOffset
+        @_visibleRange[0] = index
         index -= 1
 
     # Find children outside the visible range
     # that are <= the "last visible index".
-    index = startIndex = @_lastVisibleIndex
+    index = startIndex = @_visibleRange[1]
     while child = children[index]
-      break if child.offset < endOffset
-      @_lastVisibleIndex = index
+      break if child.startOffset < endOffset
+      @_visibleRange[1] = index
       index -= 1
 
     # If the "last visible index" did not change...
-    if @_lastVisibleIndex is startIndex
+    if @_visibleRange[1] is startIndex
 
       # Find children inside the visible range
       # that are > the "last visible index".
-      index = @_lastVisibleIndex + 1
+      index = startIndex + 1
       while child = children[index]
-        break if child.offset > endOffset
-        @_lastVisibleIndex = index
+        break if child.startOffset > endOffset
+        @_visibleRange[1] = index
         index += 1
 
     return
 
-  _onLayout: (layout) ->
-    {scroll} = this
-    @_offset = layout[scroll.axis]
-    @_length = layout[if scroll.axis is "x" then "width" else "height"]
-    if @_isRoot then scroll._setContentLength @_length
-    else @_isVisible = scroll._isAreaVisible @_offset, @_length
-    @didLayout.emit()
+type.overrideMethods
 
-  _onFooterLayout: (layout) ->
-    @_footerLength = layout[if @scroll.axis is "x" then "width" else "height"]
+  __didReveal: ->
+
+    if @_section
+      @_section.__childDidLayout this, @_length
+
+    @_updateVisibility()
+    @_revealMountedRange()
+    return
+
+  __lengthDidChange: (length, oldLength) ->
+
+    @__super arguments
+
+    if @_isRevealed and @_section
+      @_section.__childDidLayout this, length - oldLength
+
+    @didLayout.emit()
+    return
+
+  __willMount: ->
+    [startIndex, endIndex] = @_mountedRange.get()
+    return if startIndex > endIndex
+
+    children = @_children.array
+    promises = []
+
+    index = startIndex - 1
+    while ++index <= endIndex
+      promises.push children[index]._trackMounting()
+
+    return Promise.all promises
 
 type.defineHooks
 
-  __onInsert: emptyFunction
+  __getVisibleArea: ->
+    @_scroll._isChildVisible this
 
-  __onRemove: emptyFunction
+  __onRemoveAll: emptyFunction
 
-  # TODO: Support this hook.
-  #       Allow a Promise to be returned for
-  #       asynchronous updates before the section is removed.
-  # __willRemove: emptyFunction
+  __childWillAttach: emptyFunction.thatReturnsArgument
+
+  __childDidAttach: emptyFunction
+
+  __childWillDetach: emptyFunction
+
+  __childWillMount: emptyFunction
+
+  __childDidLayout: (child, lengthChange) ->
+    @_setLength @_length + lengthChange
+    return
+
+  __childDidReveal: emptyFunction
+
+  __childDidConceal: emptyFunction
 
 #
 # Rendering
 #
 
-type.propTypes =
+type.defineProps
   style: Style
-  removeClippedSubviews: Boolean
-
-type.propDefaults =
-  removeClippedSubviews: no # TODO: Should this be `yes`?
 
 type.render ->
   return View
-    style: @props.style
-    children: @_renderSection()
-    removeClippedSubviews: @props.removeClippedSubviews
-    onLayout: (event) => @_onLayout event.nativeEvent.layout
+    ref: @_rootDidRef
+    style: [
+      @styles.container()
+      @props.style
+      @_rootStyle
+    ]
+    children: [
+      @_renderHeader()
+      if @isEmpty then @__renderEmpty()
+      else @_renderContents()
+      @_renderFooter()
+      @__renderOverlay()
+    ]
 
 type.defineMethods
 
-  _renderSection: ->
+  _renderHeader: ->
 
-    return @__renderEmpty() if @isEmpty
+    if @_elements.header isnt no
+      return @_elements.header
 
-    { length } = children = @_renderChildren()
+    return @_elements.header = View
+      children: @__renderHeader()
+      onLayout: @_headerDidLayout
 
-    @_headerElements[0] ?= if @_header then @_header.renderEmpty() else @__renderHeader()
-    @_headerElements[1] ?= if @_header then @_header.render() else false
+  _renderContents: ->
+    [startIndex, endIndex] = @_mountedRange.get()
+    return [] if endIndex < 0
 
-    if @_children.length is length
-      @_footerElement ?= View
-        children: @__renderFooter()
-        onLayout: (event) =>
-          @_onFooterLayout event.nativeEvent.layout
-
-    return [
-      @_headerElements[0]
-      children
-      @_headerElements[1]
-      @_footerElement
-    ]
-
-  _renderChildren: ->
-
-    { startIndex, endIndex } = this
-    length = endIndex - startIndex
-
-    children = @_children
-    elements = @_childElements
-
-    # TODO: Only iterate the unmounted children?
-    offset = -1
-    while ++offset < length
-      index = startIndex + offset
+    children = @_children._array
+    elements = @_elements.children
+    index = startIndex - 1
+    while ++index <= endIndex
       continue if elements[index] isnt no
-      elements[index] = children[index].render()
+      child = children[index]
+      elements[index] = child.render {key: child.key}
 
-    # TODO: Hide mounted children that are not in the active range?
-    return elements
+    return View
+      style: @styles.contents()
+      children: elements
+
+  _renderFooter: ->
+
+    if @_elements.footer isnt no
+      return @_elements.footer
+
+    return @_elements.footer = View
+      children: @__renderFooter()
+      onLayout: @_footerDidLayout
 
 type.defineHooks
+
+  __renderEmpty: emptyFunction.thatReturnsFalse
 
   __renderHeader: emptyFunction.thatReturnsFalse
 
   __renderFooter: emptyFunction.thatReturnsFalse
 
-  __renderEmpty: emptyFunction.thatReturnsFalse
+  __renderOverlay: emptyFunction.thatReturnsFalse
+
+type.defineStyles
+
+  container: null
+
+  contents: null
 
 module.exports = ScrollSection = type.build()
