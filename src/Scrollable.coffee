@@ -10,6 +10,7 @@ clampValue = require "clampValue"
 ReactType = require "modx/lib/Type"
 Device = require "modx/lib/Device"
 isType = require "isType"
+isDev = require "isDev"
 Event = require "Event"
 View = require "modx/lib/View"
 Null = require "Null"
@@ -116,7 +117,7 @@ type.defineReactions
   _offset: ->
     offset = 0 - @_drag.offset.get()
     offset = @__computeOffset offset, @minOffset, @maxOffset
-    assertType offset, Number
+    isDev and assertType offset, Number
     return Device.round 0 - offset
 
 type.defineListeners -> do =>
@@ -203,8 +204,9 @@ type.defineMethods
     @_children = RootSection {scroll: this}
 
   scrollTo: (offset, config) ->
-    assertType offset, Number
-    assertType config, Object
+    if isDev
+      assertType offset, Number
+      assertType config, Object
     config.toValue = 0 - offset
     # if isType config.velocity, Number
     #   config.velocity = 0 - config.velocity
@@ -239,7 +241,7 @@ type.defineMethods
 
     if (contentLength isnt null) and (visibleLength isnt null)
       endOffset = @__computeEndOffset contentLength, visibleLength
-      assertType endOffset, Number.or Null
+      isDev and assertType endOffset, Number.or Null
 
     if endOffset isnt @_endOffset
       @_endOffset = endOffset
