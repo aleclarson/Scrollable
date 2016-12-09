@@ -1,7 +1,6 @@
 
-{Type} = require "modx"
-
 emptyFunction = require "emptyFunction"
+ReactType = require "modx/lib/Type"
 Promise = require "Promise"
 Event = require "Event"
 isDev = require "isDev"
@@ -9,7 +8,7 @@ isDev = require "isDev"
 revealedStyle = {position: "relative", opacity: 1}
 concealedStyle = {position: "absolute", opacity: 0}
 
-type = Type "Scrollable_Child"
+type = ReactType "Scrollable_Child"
 
 type.defineValues
 

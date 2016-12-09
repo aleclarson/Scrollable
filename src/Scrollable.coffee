@@ -1,21 +1,23 @@
 
-{Type, Device, Style, Children} = require "modx"
+{Style, Children} = require "react-validators"
 {Number} = require "Nan"
-{View} = require "modx/views"
 
 DragResponder = require "DragResponder"
 emptyFunction = require "emptyFunction"
 Rubberband = require "Rubberband"
 assertType = require "assertType"
 clampValue = require "clampValue"
+ReactType = require "modx/lib/Type"
+Device = require "modx/lib/Device"
 isType = require "isType"
+isDev = require "isDev"
 Event = require "Event"
+View = require "modx/lib/View"
 Null = require "Null"
-bind = require "bind"
 
 RootSection = require "./RootSection"
 
-type = Type "Scrollable"
+type = ReactType "Scrollable"
 
 type.defineOptions
   axis: DragResponder.Axis.isRequired
@@ -115,7 +117,7 @@ type.defineReactions
   _offset: ->
     offset = 0 - @_drag.offset.get()
     offset = @__computeOffset offset, @minOffset, @maxOffset
-    assertType offset, Number
+    isDev and assertType offset, Number
     return Device.round 0 - offset
 
 type.defineListeners -> do =>
@@ -202,8 +204,9 @@ type.defineMethods
     @_children = RootSection {scroll: this}
 
   scrollTo: (offset, config) ->
-    assertType offset, Number
-    assertType config, Object
+    if isDev
+      assertType offset, Number
+      assertType config, Object
     config.toValue = 0 - offset
     # if isType config.velocity, Number
     #   config.velocity = 0 - config.velocity
@@ -217,7 +220,7 @@ type.defineMethods
   _onLayout: ->
     @_reachedEnd = no
     @_updateReachedEnd @_offset.get(), @_endOffset
-    @__events.didLayout()
+    @didLayout.emit()
     return
 
   _setContentLength: (newLength) ->
@@ -238,7 +241,7 @@ type.defineMethods
 
     if (contentLength isnt null) and (visibleLength isnt null)
       endOffset = @__computeEndOffset contentLength, visibleLength
-      assertType endOffset, Number.or Null
+      isDev and assertType endOffset, Number.or Null
 
     if endOffset isnt @_endOffset
       @_endOffset = endOffset
@@ -249,7 +252,7 @@ type.defineMethods
     newValue = @__isEndReached offset, endOffset
     return if @_reachedEnd is newValue
     if @_reachedEnd = newValue
-      @__events.didReachEnd()
+      @didReachEnd.emit()
     return
 
   _rebound: (velocity) ->
@@ -320,7 +323,7 @@ type.defineBoundMethods
       # @_children and @_children.updateVisibleRange()
 
     @__offsetDidChange offset
-    @__events.didScroll offset
+    @didScroll.emit offset
     return
 
   _reboundDidUpdate: (offset) ->

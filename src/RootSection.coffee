@@ -1,11 +1,10 @@
 
-{Type} = require "modx"
-
 emptyFunction = require "emptyFunction"
+ReactType = require "modx/lib/Type"
 
 Section = require "./Section"
 
-type = Type "Scrollable_RootSection"
+type = ReactType "Scrollable_RootSection"
 
 type.inherits Section
 

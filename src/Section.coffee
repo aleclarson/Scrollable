@@ -1,23 +1,24 @@
 
 # TODO: Save memory by replacing offscreen children with empty views of the same length.
 
-{Type, Style} = require "modx"
+{Style} = require "react-validators"
 {Number} = require "Nan"
-{View} = require "modx/views"
 
 emptyFunction = require "emptyFunction"
 ReactiveRange = require "ReactiveRange"
 ReactiveList = require "ReactiveList"
 assertType = require "assertType"
+ReactType = require "modx/lib/Type"
 Promise = require "Promise"
 Event = require "Event"
 Range = require "Range"
 isDev = require "isDev"
+View = require "modx/lib/View"
 
 SectionHeader = require "./SectionHeader"
 ScrollChild = require "./Child"
 
-type = Type "Scrollable_Section"
+type = ReactType "Scrollable_Section"
 
 type.inherits ScrollChild
 
