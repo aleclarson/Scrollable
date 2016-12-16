@@ -55,14 +55,14 @@ type.defineReactiveValues
 type.defineValues (options) ->
 
   # Emits when 'offset' is changed.
-  didScroll: Event.sync
+  didScroll: Event
     argTypes: {offset: Number}
 
   # Emits when 'contentLength' or 'endOffset' is changed.
-  didLayout: Event.sync()
+  didLayout: Event()
 
   # Emits when 'offset' gets close enough to 'endOffset'.
-  didReachEnd: Event.sync()
+  didReachEnd: Event()
 
   # The root section that measures any children. (optional)
   _children: null

@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "DragResponder": "aleclarson/DragResponder#2.1.0",
-    "Event": "aleclarson/Event#2.2.1",
+    "Event": "aleclarson/Event#3.0.0",
     "Nan": "aleclarson/Nan#1.1.1",
     "Null": "aleclarson/Null#1.0.1",
     "Promise": "aleclarson/Promise#2.1.0",
