@@ -1,6 +1,6 @@
 {
   "name": "Scrollable",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "main": "js/Scrollable",
   "plugins": [
     "lotus-coffee"
@@ -10,8 +10,8 @@
     "postinstall": "npm run build"
   },
   "dependencies": {
-    "DragResponder": "aleclarson/DragResponder#2.1.0",
-    "Event": "aleclarson/Event#2.2.1",
+    "DragResponder": "aleclarson/DragResponder#2.1.1",
+    "Event": "aleclarson/Event#3.0.0",
     "Nan": "aleclarson/Nan#1.1.1",
     "Null": "aleclarson/Null#1.0.1",
     "Promise": "aleclarson/Promise#2.1.0",
@@ -24,7 +24,7 @@
     "emptyFunction": "aleclarson/emptyFunction#1.0.0",
     "isDev": "aleclarson/isDev#2.0.0",
     "isType": "aleclarson/isType#1.0.1",
-    "modx": "aleclarson/modx#2.1.0",
+    "modx": "aleclarson/modx#2.2.0",
     "react-validators": "aleclarson/react-validators#1.0.1"
   }
 }
