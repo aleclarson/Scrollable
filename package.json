@@ -1,0 +1,23 @@
+{
+  "name": "Scrollable",
+  "version": "2.0.2",
+  "main": "js/Scrollable",
+  "dependencies": {
+    "DragResponder": "aleclarson/DragResponder#2.1.1",
+    "Event": "aleclarson/Event#3.0.0",
+    "Nan": "aleclarson/Nan#1.1.1",
+    "Null": "aleclarson/Null#1.0.1",
+    "Promise": "aleclarson/Promise#2.1.0",
+    "Range": "aleclarson/Range#1.0.1",
+    "ReactiveList": "aleclarson/ReactiveList#1.2.0",
+    "ReactiveRange": "aleclarson/ReactiveRange#1.0.0",
+    "Rubberband": "aleclarson/Rubberband#1.0.0",
+    "assertType": "aleclarson/assertType#2.0.1",
+    "clampValue": "aleclarson/clampValue#1.0.0",
+    "emptyFunction": "aleclarson/emptyFunction#1.0.0",
+    "isDev": "aleclarson/isDev#2.0.0",
+    "isType": "aleclarson/isType#1.0.1",
+    "modx": "aleclarson/modx#2.2.0",
+    "react-validators": "aleclarson/react-validators#1.0.1"
+  }
+}
