@@ -180,7 +180,10 @@ type.defineGetters
 
   didTouchEnd: -> @_drag.didTouchEnd
 
-  hasChildren: -> @_children isnt null
+  isEmpty: ->
+    if @_children
+    then @_children.isEmpty
+    else !@props.children?
 
 type.definePrototype
 
