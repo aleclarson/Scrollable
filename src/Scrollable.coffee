@@ -139,7 +139,7 @@ type.defineListeners -> do =>
   @_drag.didTouchMove (gesture) =>
     @__dragDidMove gesture
 
-  @_drag.didEnd (gesture) =>
+  @_drag.didRelease (gesture) =>
     @__dragDidEnd gesture
 
 #
