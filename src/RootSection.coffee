@@ -1,14 +1,14 @@
 
 emptyFunction = require "emptyFunction"
-ReactType = require "modx/lib/Type"
+modx = require "modx"
 
 Section = require "./Section"
 
-type = ReactType "Scrollable_RootSection"
+type = modx.Type "Scrollable_RootSection"
 
 type.inherits Section
 
-type.defineOptions
+type.defineArgs
   scroll: Object.Kind
 
 type.defineValues (options) ->

@@ -2,16 +2,16 @@
 {Element} = require "react-validators"
 
 emptyFunction = require "emptyFunction"
-ReactType = require "modx/lib/Type"
 View = require "modx/lib/View"
+modx = require "modx"
 
 ScrollChild = require "./Child"
 
-type = ReactType "Scrollable_Row"
+type = modx.Type "Scrollable_Row"
 
 type.inherits ScrollChild
 
-type.defineOptions
+type.defineArgs
   key: String
   props: Object
   render: Function.Kind

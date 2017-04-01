@@ -8,28 +8,33 @@ emptyFunction = require "emptyFunction"
 ReactiveRange = require "ReactiveRange"
 ReactiveList = require "ReactiveList"
 assertType = require "assertType"
-ReactType = require "modx/lib/Type"
 Promise = require "Promise"
 Event = require "Event"
 Range = require "Range"
 isDev = require "isDev"
 View = require "modx/lib/View"
+modx = require "modx"
 
 SectionHeader = require "./SectionHeader"
 ScrollChild = require "./Child"
 
-type = ReactType "Scrollable_Section"
+type = modx.Type "Scrollable_Section"
 
 type.inherits ScrollChild
 
-type.defineOptions
-  key: String
-  mountedRange: Range
-  batchSize: Number.withDefault 1
-  header: SectionHeader.Kind
-  renderHeader: Function
-  renderFooter: Function
-  renderEmpty: Function
+type.defineArgs ->
+
+  types:
+    key: String
+    mountedRange: Range
+    batchSize: Number
+    header: SectionHeader.Kind
+    renderHeader: Function
+    renderFooter: Function
+    renderEmpty: Function
+
+  defaults:
+    batchSize: 1
 
 type.defineStatics
 

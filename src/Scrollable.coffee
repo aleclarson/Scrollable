@@ -7,32 +7,40 @@ emptyFunction = require "emptyFunction"
 Rubberband = require "Rubberband"
 assertType = require "assertType"
 clampValue = require "clampValue"
-ReactType = require "modx/lib/Type"
 Device = require "modx/lib/Device"
 isType = require "isType"
 isDev = require "isDev"
 Event = require "Event"
 View = require "modx/lib/View"
 Null = require "Null"
+modx = require "modx"
 
 RootSection = require "./RootSection"
 
-type = ReactType "Scrollable"
+type = modx.Type "Scrollable"
 
-type.defineOptions
-  axis: DragResponder.Axis.isRequired
-  offset: Number
-  endThreshold: Number.withDefault 0
-  fastThreshold: Number.withDefault 0.2
-  stretchLimit: Number
-  elasticity: Number.withDefault 0.7
+type.defineArgs ->
 
-type.initArgs ([options]) ->
+  required:
+    axis: yes
 
-  options.stretchLimit ?=
-    if options.axis is "x"
-    then Device.width
-    else Device.height
+  types:
+    axis: DragResponder.Axis
+    offset: Number
+    endThreshold: Number
+    fastThreshold: Number
+    stretchLimit: Number
+    elasticity: Number
+
+  defaults:
+    endThreshold: 0
+    fastThreshold: 0.2
+    elasticity: 0.7
+
+type.createArgs (args) ->
+  [options] = args
+  options.stretchLimit ?= Device[if options.axis is "x" then "width" else "height"]
+  return args
 
 type.defineStatics
 
