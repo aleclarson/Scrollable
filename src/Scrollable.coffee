@@ -1,4 +1,6 @@
 
+require("eve").installMixin()
+
 {Style, Children} = require "react-validators"
 {Number} = require "Nan"
 
@@ -10,7 +12,6 @@ clampValue = require "clampValue"
 Device = require "modx/lib/Device"
 isType = require "isType"
 isDev = require "isDev"
-Event = require "Event"
 View = require "modx/lib/View"
 Null = require "Null"
 modx = require "modx"
@@ -50,6 +51,17 @@ type.defineStatics
 
   Child: lazy: -> require "./Child"
 
+type.defineEvents
+
+  # Emits when 'offset' is changed.
+  didScroll: {offset: Number}
+
+  # Emits when 'contentLength' or 'endOffset' is changed.
+  didLayout: null
+
+  # Emits when 'offset' gets close enough to 'endOffset'.
+  didReachEnd: null
+
 type.defineReactiveValues
 
   _visibleLength: null
@@ -61,16 +73,6 @@ type.defineReactiveValues
   _touchable: yes
 
 type.defineValues (options) ->
-
-  # Emits when 'offset' is changed.
-  didScroll: Event
-    argTypes: {offset: Number}
-
-  # Emits when 'contentLength' or 'endOffset' is changed.
-  didLayout: Event()
-
-  # Emits when 'offset' gets close enough to 'endOffset'.
-  didReachEnd: Event()
 
   # The root section that measures any children. (optional)
   _children: null

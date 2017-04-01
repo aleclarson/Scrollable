@@ -1,7 +1,7 @@
 
 emptyFunction = require "emptyFunction"
 Promise = require "Promise"
-Event = require "Event"
+Event = require "eve"
 isDev = require "isDev"
 modx = require "modx"
 
